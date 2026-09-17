@@ -1,0 +1,31 @@
+name: werror
+version: "0.1"
+description: |
+  Sample passthrough-emit preset. Wrap libraries follow the same
+  shape: a function reads an error argument and returns the
+  wrapped error at a designated return slot. Adopters copy this
+  preset, change the function patterns to match the wrap
+  signatures their codebase uses, and register the preset
+  alongside the analyzer's built-in set so a caller-side
+  vow:emit marker anchored to a return that flows through one of
+  the listed calls resolves as the wrapped-return destination.
+
+  The patterns below use the RFC 2606 reserved domain
+  example.com/wraplib so the file ships as an illustrative
+  template without naming a specific third-party library.
+
+subjects:
+  - match: "annotation:vow:define @Sentinel"
+
+obligations:
+  - type: passthrough-emit
+    detail:
+      functions:
+        - pattern: "example.com/wraplib.Wrap"
+          arg-position: 0
+          return-slot: 1
+        - pattern: "example.com/wraplib.Errorf"
+          arg-position: 0
+          return-slot: 1
+
+severity: warning

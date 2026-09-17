@@ -1,0 +1,39 @@
+name: closable
+version: "0.1"
+description: |
+  Variables annotated with `// vow:define @Closable` represent
+  resources whose lifetime must be terminated by a Close call before
+  the variable goes out of scope. The analyzer tracks each Closable
+  value from its acquisition site to a discharge: a `defer c.Close()`
+  in the same function or a `vow:emit c` declaration that transfers
+  the close obligation to the caller's context (goroutine launch,
+  callback argument, or storage write).
+
+subjects:
+  - match: "annotation:vow:define @Closable"
+
+# built_in_closables lists Go types whose source the author cannot
+# touch (standard library, third-party packages). Each entry is a
+# fully-qualified type expression as it appears at use sites. The
+# analyzer treats every value of these types as Closable in addition
+# to user-defined types carrying the vow:define @Closable marker.
+built_in_closables:
+  - "*os.File"
+  - "*net.TCPConn"
+  - "*bufio.Writer"
+  - "io.Closer"
+
+# The `must-close` type is not dispatched by the preset loop in
+# analyzer.go: that loop's switch carries a case for `must-consume`
+# only. The Closable check runs as validateClosableLifetime, called
+# outside the loop for every package. This block cannot be dropped —
+# preset validation requires both subjects and obligations, so removing
+# it makes the embedded preset fail to load and the analyzer panic.
+obligations:
+  - type: must-close
+    detail:
+      discharges:
+        - defer
+        - vow:emit
+
+severity: warning

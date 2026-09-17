@@ -1,0 +1,19 @@
+name: sentinel-error
+version: "0.1"
+description: |
+  Errors annotated with `// vow:define @Sentinel` must be consumed
+  (matched with errors.Is or errors.As) before they leave the function
+  that introduced them. Returning the sentinel directly, or wrapping it
+  with %w and returning the result, is reported.
+
+subjects:
+  - match: "annotation:vow:define @Sentinel"
+
+obligations:
+  - type: must-consume
+    detail:
+      consumers:
+        - errors.Is
+        - errors.As
+
+severity: warning

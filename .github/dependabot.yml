@@ -1,0 +1,25 @@
+version: 2
+updates:
+  # go.mod sits at the repository root.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      # One pull request per ecosystem per week: the tree is small enough
+      # that reviewing updates together costs less than reviewing them one
+      # at a time.
+      gomod:
+        patterns: ["*"]
+
+  # Reads .github/workflows/ under this directory. Updates the pinned SHA
+  # and the version comment beside it together.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+    groups:
+      actions:
+        patterns: ["*"]
