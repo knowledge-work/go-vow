@@ -1,0 +1,7 @@
+# Every position whose type can hold nil carries a nullness decl, so a
+# package added later is covered without anyone remembering to opt it
+# in. The packages that predate this default each carry a vow.yaml
+# turning the demand back off, with the count still owed; those files
+# are the list of what is left.
+nil_decl:
+  require_declarations: true

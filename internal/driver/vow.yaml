@@ -1,0 +1,5 @@
+# 42 positions across 4 files still lack a nullness decl. The demand is
+# off here until they are written; the root vow.yaml turns it on
+# everywhere else.
+nil_decl:
+  require_declarations: false

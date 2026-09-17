@@ -1,0 +1,26 @@
+name: std/result
+version: "0.1"
+description: |
+  Standard result-shaped presets. Provides reusable rule templates
+  for the most common multi-return Go shapes.
+
+    OkErr — an exclusive (T, error) pair: either the value is set
+            and the error is nil, or the value is the zero value and
+            the error is non-nil.
+    Either — a one-of where the position is set to one of two
+             non-nil/non-zero values.
+
+  Chain authorisation across an open propagation set is not
+  expressed through a dedicated rule template — list the concrete
+  sentinel references in the function's vow:cond signature.
+
+  This preset declares only rules; it carries no obligations of its
+  own and is meant to be imported via `// vow:import result "preset/std/result"`.
+
+rules:
+  OkErr:
+    params: [T, E]
+    body: "(nonzero T, nil) | (nil, nonzero E)"
+  Either:
+    params: [L, R]
+    body: "(nonzero L | nonzero R)"

@@ -1,0 +1,7 @@
+# 1422 positions across 75 files still lack a nullness decl, an order
+# more than the rest of the debt put together. The demand is off here until
+# they are written; the root vow.yaml turns it on everywhere else. No
+# date is set: the count is what decides when this is worth splitting
+# into reviewable pieces, and nothing depends on it being soon.
+nil_decl:
+  require_declarations: false
