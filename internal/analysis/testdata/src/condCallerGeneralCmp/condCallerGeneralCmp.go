@@ -144,3 +144,21 @@ func callerDifferentLiteralDecidableButAnchorLimited() {
 	}
 	_ = status
 }
+
+// callerConstShadowedStatusGuardSilent declares a constant status
+// inside the if-body, so the guard on it says nothing about the
+// status LookupPayload returned and payload may be nil.
+func callerConstShadowedStatusGuardSilent(c bool) {
+	payload, status := LookupPayload()
+	if c {
+		const status = 1
+		if status != 1 {
+			return
+		}
+		if payload == nil { // want `vow\[nil-safety\]: guard on payload is dead \(impossible\); vow:cond rule .* on LookupPayload narrows return position 1 to non-nil once the guard on status short-circuits`
+			return
+		}
+	}
+	_ = payload
+	_ = status
+}

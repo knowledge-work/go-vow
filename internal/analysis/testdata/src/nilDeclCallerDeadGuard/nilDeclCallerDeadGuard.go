@@ -7,7 +7,8 @@
 // The silent fixtures pin the restrictions that keep the surface
 // AST-only: a rewritten local, an address-of hand-off, a closure in
 // the block, a fall-through guard body, an init clause on the if, and
-// a guard nested in an inner block all leave the diagnostic unemitted.
+// a guard nested in an inner block other than an if or else body all
+// leave the diagnostic unemitted.
 package nilDeclCallerDeadGuard
 
 // Box is the value type every fixture allocates.
@@ -175,6 +176,143 @@ func guardInNestedBlockOK() {
 		if b == nil {
 			return
 		}
+	}
+	_ = b
+}
+
+// guardInIfBody pins the body-narrow carry the shadow fixtures below
+// rely on: the if-body scan inherits the outer binding, so a guard on
+// the same local inside it is dead.
+func guardInIfBody(c bool) {
+	b := newBox()
+	if c {
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+	}
+	_ = b
+}
+
+// guardOnVarShadowInIfBodyOK declares a new b inside the if-body, so
+// the inner guard checks that variable rather than the newBox
+// result.
+func guardOnVarShadowInIfBodyOK(c bool) {
+	b := newBox()
+	if c {
+		var b *Box
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+		_ = b
+	}
+	_ = b
+}
+
+// guardOnVarShadowInElseBodyOK is the same shadow in an else-body,
+// which inherits the outer binding like an if-body does.
+func guardOnVarShadowInElseBodyOK(c bool) {
+	b := newBox()
+	if c {
+		_ = b
+	} else {
+		var b *Box
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+		_ = b
+	}
+	_ = b
+}
+
+// guardOnInitialisedVarShadowInIfBodyOK is the same shadow with an
+// initialiser that can return nil.
+func guardOnInitialisedVarShadowInIfBodyOK(c bool) {
+	b := newBox()
+	if c {
+		var b = nillableBox()
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+		_ = b
+	}
+	_ = b
+}
+
+// guardOnMultiNameVarShadowInIfBodyOK shadows b from a declaration that
+// names more than one variable.
+func guardOnMultiNameVarShadowInIfBodyOK(c bool) {
+	b := newBox()
+	if c {
+		var n, b = 1, nillableBox()
+		_ = n
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+		_ = b
+	}
+	_ = b
+}
+
+// guardOnGroupedVarShadowInIfBodyOK shadows b from the second spec of
+// a grouped declaration.
+func guardOnGroupedVarShadowInIfBodyOK(c bool) {
+	b := newBox()
+	if c {
+		var (
+			n = 1
+			b = nillableBox()
+		)
+		_ = n
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+		_ = b
+	}
+	_ = b
+}
+
+// guardOnLabeledVarShadowInIfBodyOK shadows b from a labeled
+// declaration, which declares b like an unlabeled one.
+func guardOnLabeledVarShadowInIfBodyOK(c bool) {
+	b := newBox()
+	if c {
+	retry:
+		var b = nillableBox()
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+		if c {
+			goto retry
+		}
+		_ = b
+	}
+	_ = b
+}
+
+// guardBesideUnrelatedVarInIfBody declares a variable of another name,
+// which leaves the binding of b in place.
+func guardBesideUnrelatedVarInIfBody(c bool) {
+	b := newBox()
+	if c {
+		var other *Box
+		_ = other
+		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+			return
+		}
+	}
+	_ = b
+}
+
+// guardAfterVarShadowInIfBody pins that a shadow ends with its block:
+// the outer guard still reads the newBox result.
+func guardAfterVarShadowInIfBody(c bool) {
+	b := newBox()
+	if c {
+		var b *Box
+		_ = b
+	}
+	if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+		return
 	}
 	_ = b
 }

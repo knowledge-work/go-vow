@@ -137,3 +137,54 @@ func callerNestedBlockDeref() {
 // condTrue is a helper that keeps the nested-block fixture
 // compilable without pulling in a real condition source.
 func condTrue() bool { return true }
+
+// callerDerefBesideUnrelatedVar is the control for
+// callerVarShadowedFooDerefSilent: a variable of another name
+// leaves foo pending, so the deref still reads the possibly-nil
+// value.
+func callerDerefBesideUnrelatedVar(c bool) {
+	foo, err := NewFooBicond()
+	_ = err
+	if c {
+		var other = &Foo{}
+		_ = other
+		_ = foo.Bar() // want `vow\[nil-safety\]: foo is dereferenced without a short-circuiting guard on err; vow:cond rule .* on NewFooBicond leaves return position 1 possibly-nil until that guard runs`
+	}
+}
+
+// callerVarShadowedFooDerefSilent declares a new foo inside the
+// if-body, so the deref reads that variable rather than the pending
+// binding.
+func callerVarShadowedFooDerefSilent(c bool) {
+	foo, err := NewFooBicond()
+	_ = err
+	if c {
+		var foo = &Foo{}
+		_ = foo.Bar() // want `vow\[nil-safety\]: foo is dereferenced without a short-circuiting guard on err; vow:cond rule .* on NewFooBicond leaves return position 1 possibly-nil until that guard runs`
+	}
+	_ = foo
+}
+
+// callerDerefBesideBlankVarDecl declares only the blank identifier,
+// which shadows nothing. foo is paired with `_` here, so dropping the
+// bindings paired with `_` would silence the deref.
+func callerDerefBesideBlankVarDecl(c bool) {
+	foo, _ := NewFooBicond()
+	if c {
+		var _ = 1
+		_ = foo.Bar() // want `vow\[nil-safety\]: foo is dereferenced without a short-circuiting guard on _; vow:cond rule .* on NewFooBicond leaves return position 1 possibly-nil until that guard runs`
+	}
+}
+
+// callerDerefBesideShadowedErrSilent dereferences the pending foo
+// after shadowing err inside the if-body, so the deref reads a
+// possibly-nil value.
+func callerDerefBesideShadowedErrSilent(c bool) {
+	foo, err := NewFooBicond()
+	_ = err
+	if c {
+		var err error
+		_ = err
+		_ = foo.Bar() // want `vow\[nil-safety\]: foo is dereferenced without a short-circuiting guard on err; vow:cond rule .* on NewFooBicond leaves return position 1 possibly-nil until that guard runs`
+	}
+}
