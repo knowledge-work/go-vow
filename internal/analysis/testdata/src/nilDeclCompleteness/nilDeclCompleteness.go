@@ -10,9 +10,18 @@
 // two marker shapes that do not describe the enclosing signature.
 package nilDeclCompleteness
 
-import "context"
+import (
+	"context"
+	"testing"
+
+	faketesting "nilDeclCompleteness/testing"
+)
 
 type Record struct{ Name string }
+
+// T shares its name with testing.T, so testingHandleLookalikes can pin
+// that the name alone does not make a handle.
+type T struct{}
 
 // undeclaredBoth carries no marker at all, so both the pointer
 // parameter and the pointer return reach the rule uncovered.
@@ -56,6 +65,27 @@ func fullyDeclared(r *Record, opts *Record) *Record { // want fullyDeclared:"nil
 func conventionTypes(ctx context.Context, payload any) (any, error) {
 	_ = ctx
 	return payload, nil
+}
+
+// testingHandles takes every testing handle and returns one.
+func testingHandles(t *testing.T, b *testing.B, f *testing.F, m *testing.M, pb *testing.PB, tb testing.TB) *testing.T { // want `vow\[nil-decl\]: vow:nil leaves parameter t, parameter b, parameter f, parameter m, parameter pb, parameter tb, return 1 without a nullness decl`
+	_, _, _, _, _ = b, f, m, pb, tb
+	return t
+}
+
+// testingHandleLookalikes reports every position. t's type only shares
+// the name T. ft's type also comes from a package named testing, but
+// not the one at import path `testing`. ts is a slice of handles, and
+// a slice can be nil.
+func testingHandleLookalikes(t *T, ft *faketesting.T, ts []*testing.T) { // want `vow\[nil-decl\]: vow:nil leaves parameter t, parameter ft, parameter ts without a nullness decl`
+	_, _, _ = t, ft, ts
+}
+
+// pointersToConventionTypes reports every position: a pointer adds a
+// layer of nilness that no convention settles, even when it points at
+// `error`, `context.Context`, or a testing handle.
+func pointersToConventionTypes(tp **testing.T, tbp *testing.TB, errp *error, ctxp *context.Context) { // want `vow\[nil-decl\]: vow:nil leaves parameter tp, parameter tbp, parameter errp, parameter ctxp without a nullness decl`
+	_, _, _, _ = tp, tbp, errp, ctxp
 }
 
 // typeParameterPositions stays silent because an unsubstituted type
