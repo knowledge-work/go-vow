@@ -67,8 +67,11 @@ func conventionTypes(ctx context.Context, payload any) (any, error) {
 	return payload, nil
 }
 
-// testingHandles takes every testing handle and returns one.
-func testingHandles(t *testing.T, b *testing.B, f *testing.F, m *testing.M, pb *testing.PB, tb testing.TB) *testing.T { // want `vow\[nil-decl\]: vow:nil leaves parameter t, parameter b, parameter f, parameter m, parameter pb, parameter tb, return 1 without a nullness decl`
+// testingHandles stays silent without any marker: the testing handles
+// carry a Go-wide nilness convention, and as with `context.Context`
+// the exemption follows the type, so the `*testing.T` return is
+// exempt too.
+func testingHandles(t *testing.T, b *testing.B, f *testing.F, m *testing.M, pb *testing.PB, tb testing.TB) *testing.T {
 	_, _, _, _, _ = b, f, m, pb, tb
 	return t
 }
