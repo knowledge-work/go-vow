@@ -268,7 +268,7 @@ func callerVarShadowedErrGuardSilent(c bool) {
 		if err != nil {
 			return
 		}
-		if foo == nil { // want `vow\[nil-safety\]: guard on foo is dead \(impossible\); vow:cond rule .* on NewFooBicond narrows return position 1 to non-nil once the guard on err short-circuits`
+		if foo == nil {
 			return
 		}
 	}
@@ -286,7 +286,7 @@ func callerVarShadowedFooGuardSilent(c bool) {
 	}
 	if c {
 		var foo *Foo
-		if foo == nil { // want `vow\[nil-safety\]: guard on foo is dead \(impossible\); vow:cond rule .* on NewFooBicond narrows return position 1 to non-nil once the guard on err short-circuits`
+		if foo == nil {
 			return
 		}
 		_ = foo
@@ -330,7 +330,9 @@ func callerGuardAfterReassignedErrSilent() {
 
 // callerRepeatedGuardBesideShadowedErrSilent guards foo twice after
 // shadowing err inside the if-body. The second guard is dead once the
-// first one returns.
+// first one returns. The shadow drops the pending cond binding paired
+// with err, so the first guard cannot promote it and the second goes
+// unreported.
 func callerRepeatedGuardBesideShadowedErrSilent(c bool) {
 	foo, err := NewFooBicond()
 	if c {
@@ -339,7 +341,7 @@ func callerRepeatedGuardBesideShadowedErrSilent(c bool) {
 		if foo == nil {
 			return
 		}
-		if foo == nil { // want `vow\[nil-safety\]: guard on foo is dead \(impossible\); vow:cond rule .* on NewFooBicond narrows return position 1 to non-nil once the guard on err short-circuits`
+		if foo == nil {
 			return
 		}
 	}

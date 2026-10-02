@@ -4,11 +4,14 @@ import (
 	"go/ast"
 	"go/token"
 	"go/types"
+	"iter"
+	"slices"
 	"strconv"
 
 	"golang.org/x/tools/go/analysis"
 
 	"github.com/knowledge-work/go-vow/internal/dsl"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // bindingSource distinguishes the fact origin of a caller-side
@@ -185,9 +188,11 @@ func validateCallerDeadGuard(pass *analysis.Pass, state *passState) {
 //  2. Drop every binding when a function literal appears — a
 //     closure can rewrite captured locals out of syntactic view.
 //  3. Invalidate bindings the statement rewrites (assign LHS,
-//     inc/dec, address-of), with a guardName cascade so a
-//     reassigned local also drops any cond binding that named it
-//     as its paired guard.
+//     inc/dec, address-of) or shadows (a var or const
+//     declaration), with a guardName cascade so a reassigned
+//     local also drops any cond binding that named it as its
+//     paired guard, and a shadowed local drops only the pending
+//     ones.
 //  4. Promote pending cond bindings when this statement is a
 //     recognised short-circuit guard shape.
 //  5. Record new bindings — cond bindings enter pending, nil
@@ -615,12 +620,12 @@ func promoteCallerBindingsOnGuard(
 }
 
 // invalidateCallerBindings drops every pending or narrowed
-// binding this statement can rewrite. Assignment LHS, inc/dec,
-// and address-of walks match the vow:nil surface's leave-alone
-// stance, and the cond-source cascade drops any pending or
-// narrowed cond binding whose guardName pairs with a rewritten
-// local so a stale guard reference cannot survive a
-// reassignment.
+// binding this statement can rewrite or shadow. Assignment LHS,
+// inc/dec, and address-of walks match the vow:nil surface's
+// leave-alone stance, and the cond-source cascade drops the pending
+// cond bindings whose guardName pairs with a rewritten or shadowed
+// local, so a guard on another variable of that name cannot promote
+// them; a rewrite also drops the narrowed ones.
 func invalidateCallerBindings(
 	stmt ast.Stmt,
 	pending map[string]callerBinding,
@@ -629,6 +634,21 @@ func invalidateCallerBindings(
 ) {
 	if len(pending) == 0 && len(narrowedNames) == 0 {
 		return
+	}
+	// forget drops the binding of name and every pending cond
+	// binding paired with it, so a later guard on name cannot
+	// promote that binding.
+	// Nil-source bindings have no cross-identifier dependency so the
+	// cascade skips them.
+	forget := func(name string) {
+		delete(pending, name)
+		delete(narrowed, name)
+		delete(narrowedNames, name)
+		for bound, binding := range pending {
+			if binding.source == bindingSourceCond && binding.guardName == name {
+				delete(pending, bound)
+			}
+		}
 	}
 	drop := func(name string) {
 		// The blank identifier is not a real local: an assignment
@@ -641,24 +661,24 @@ func invalidateCallerBindings(
 		if name == "_" {
 			return
 		}
-		delete(pending, name)
-		delete(narrowed, name)
-		delete(narrowedNames, name)
-		// Cond-source cascade: a reassigned local cannot serve as
-		// the guard reference for any cond binding that named it.
-		// Nil-source bindings have no cross-identifier dependency
-		// so the walk skips them.
-		for bound, binding := range pending {
-			if binding.source == bindingSourceCond && binding.guardName == name {
-				delete(pending, bound)
-			}
-		}
+		forget(name)
+		// Reassignment also drops the narrowed cond bindings paired
+		// with name, which gives up their reports: the bound local
+		// still holds the value the guard on name proved.
 		for bound, binding := range narrowed {
 			if binding.source == bindingSourceCond && binding.guardName == name {
 				delete(narrowed, bound)
 				delete(narrowedNames, bound)
 			}
 		}
+	}
+	// A var or const declaration shadows its names only until its
+	// own block ends, so unlike an assignment, one nested inside stmt
+	// is left to the scan of its block. A narrowed binding paired
+	// with a shadowed name stays narrowed, since the shadow leaves
+	// the bound local's value as it was.
+	for _, name := range namesDeclaredBy(stmt) {
+		forget(name)
 	}
 	ast.Inspect(stmt, func(n ast.Node) bool {
 		switch v := n.(type) {
@@ -681,6 +701,36 @@ func invalidateCallerBindings(
 		}
 		return true
 	})
+}
+
+// namesDeclaredBy returns the names other than `_` that a var or
+// const declaration statement introduces, and nil for any other
+// statement. A label on the declaration does not change their
+// scope, so it is looked through.
+func namesDeclaredBy(stmt ast.Stmt) []string {
+	if labeled, ok := stmt.(*ast.LabeledStmt); ok {
+		return namesDeclaredBy(labeled.Stmt)
+	}
+	decl, ok := stmt.(*ast.DeclStmt)
+	if !ok {
+		return nil
+	}
+	gen, ok := decl.Decl.(*ast.GenDecl)
+	if !ok {
+		return nil
+	}
+	return seq.ChainOf(gen.Specs...).
+		FilterMap(func(spec ast.Spec) (*ast.ValueSpec, bool) {
+			valueSpec, isValueSpec := spec.(*ast.ValueSpec)
+			return valueSpec, isValueSpec
+		}).
+		FlatMap(func(valueSpec *ast.ValueSpec) iter.Seq[*ast.Ident] {
+			return slices.Values(valueSpec.Names)
+		}).
+		FilterMap(func(ident *ast.Ident) (string, bool) {
+			return ident.Name, ident.Name != "_"
+		}).
+		ToSlice()
 }
 
 // recordCallerBindings admits new bindings from a single-call

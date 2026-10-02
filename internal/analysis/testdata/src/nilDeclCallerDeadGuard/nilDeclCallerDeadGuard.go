@@ -8,7 +8,9 @@
 // AST-only: a rewritten local, an address-of hand-off, a closure in
 // the block, a fall-through guard body, an init clause on the if, and
 // a guard nested in an inner block other than an if or else body all
-// leave the diagnostic unemitted.
+// leave the diagnostic unemitted. A guard on a variable that shadows
+// the bound local is silent for a different reason: it is not a guard
+// on that local.
 package nilDeclCallerDeadGuard
 
 // Box is the value type every fixture allocates.
@@ -200,7 +202,7 @@ func guardOnVarShadowInIfBodyOK(c bool) {
 	b := newBox()
 	if c {
 		var b *Box
-		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+		if b == nil {
 			return
 		}
 		_ = b
@@ -216,7 +218,7 @@ func guardOnVarShadowInElseBodyOK(c bool) {
 		_ = b
 	} else {
 		var b *Box
-		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+		if b == nil {
 			return
 		}
 		_ = b
@@ -230,7 +232,7 @@ func guardOnInitialisedVarShadowInIfBodyOK(c bool) {
 	b := newBox()
 	if c {
 		var b = nillableBox()
-		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+		if b == nil {
 			return
 		}
 		_ = b
@@ -245,7 +247,7 @@ func guardOnMultiNameVarShadowInIfBodyOK(c bool) {
 	if c {
 		var n, b = 1, nillableBox()
 		_ = n
-		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+		if b == nil {
 			return
 		}
 		_ = b
@@ -263,7 +265,7 @@ func guardOnGroupedVarShadowInIfBodyOK(c bool) {
 			b = nillableBox()
 		)
 		_ = n
-		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+		if b == nil {
 			return
 		}
 		_ = b
@@ -278,7 +280,7 @@ func guardOnLabeledVarShadowInIfBodyOK(c bool) {
 	if c {
 	retry:
 		var b = nillableBox()
-		if b == nil { // want `vow\[nil-safety\]: guard on b is dead \(impossible\); vow:nil declared ! at return position 1 of newBox \(the call cannot return nil\)`
+		if b == nil {
 			return
 		}
 		if c {

@@ -160,7 +160,7 @@ func callerVarShadowedFooDerefSilent(c bool) {
 	_ = err
 	if c {
 		var foo = &Foo{}
-		_ = foo.Bar() // want `vow\[nil-safety\]: foo is dereferenced without a short-circuiting guard on err; vow:cond rule .* on NewFooBicond leaves return position 1 possibly-nil until that guard runs`
+		_ = foo.Bar()
 	}
 	_ = foo
 }
@@ -178,13 +178,14 @@ func callerDerefBesideBlankVarDecl(c bool) {
 
 // callerDerefBesideShadowedErrSilent dereferences the pending foo
 // after shadowing err inside the if-body, so the deref reads a
-// possibly-nil value.
+// possibly-nil value. The shadow drops the cond binding paired with
+// err, as reassigning err does, so the deref goes unreported.
 func callerDerefBesideShadowedErrSilent(c bool) {
 	foo, err := NewFooBicond()
 	_ = err
 	if c {
 		var err error
 		_ = err
-		_ = foo.Bar() // want `vow\[nil-safety\]: foo is dereferenced without a short-circuiting guard on err; vow:cond rule .* on NewFooBicond leaves return position 1 possibly-nil until that guard runs`
+		_ = foo.Bar()
 	}
 }

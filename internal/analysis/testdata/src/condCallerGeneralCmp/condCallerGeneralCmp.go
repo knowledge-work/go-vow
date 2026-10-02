@@ -155,7 +155,7 @@ func callerConstShadowedStatusGuardSilent(c bool) {
 		if status != 1 {
 			return
 		}
-		if payload == nil { // want `vow\[nil-safety\]: guard on payload is dead \(impossible\); vow:cond rule .* on LookupPayload narrows return position 1 to non-nil once the guard on status short-circuits`
+		if payload == nil {
 			return
 		}
 	}
