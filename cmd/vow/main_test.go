@@ -47,7 +47,7 @@ func TestParseDriverArgs(t *testing.T) {
 		"changed-files followed by package args via separator": {
 			args:          []string{"--changed-files", "a.go", "b.go", "--", "./..."},
 			wantFlags:     driverFlags{Changed: cli.ChangedFileSet{Files: []string{"a.go", "b.go"}}},
-			wantRemaining: []string{"--", "./..."},
+			wantRemaining: []string{"./..."},
 		},
 		"package arg without separator is captured as file": {
 			args:      []string{"--changed-files", "a.go", "./..."},
@@ -103,33 +103,32 @@ func TestParseDriverArgs(t *testing.T) {
 			wantRemaining: []string{"./..."},
 		},
 		"unknown single-dash flag": {
-			args:          []string{"-json", "./..."},
-			wantRemaining: []string{"-json", "./..."},
+			args:    []string{"-json", "./..."},
+			wantErr: "unknown flag -json",
 		},
 		"unknown double-dash flag": {
-			args:          []string{"--json", "./..."},
-			wantRemaining: []string{"--json", "./..."},
+			args:    []string{"--json", "./..."},
+			wantErr: "unknown flag --json",
 		},
 		"unknown flag after a package pattern": {
-			args:          []string{"./...", "-bogus"},
-			wantRemaining: []string{"./...", "-bogus"},
+			args:    []string{"./...", "-bogus"},
+			wantErr: "unknown flag -bogus",
 		},
 		"driver flag spelled with an equals sign": {
-			args:          []string{"--config-file=vow.yaml", "./..."},
-			wantRemaining: []string{"--config-file=vow.yaml", "./..."},
+			args:    []string{"--config-file=vow.yaml", "./..."},
+			wantErr: "unknown flag --config-file=vow.yaml",
 		},
 		"separator before a package pattern": {
 			args:          []string{"--", "./..."},
-			wantRemaining: []string{"--", "./..."},
+			wantRemaining: []string{"./..."},
 		},
 		"dash-prefixed pattern after the separator": {
 			args:          []string{"--", "-weird"},
-			wantRemaining: []string{"--", "-weird"},
+			wantRemaining: []string{"-weird"},
 		},
 		"known flag after the separator is a package pattern": {
 			args:          []string{"--", "-test"},
-			wantFlags:     driverFlags{IncludeTests: true},
-			wantRemaining: []string{"--"},
+			wantRemaining: []string{"-test"},
 		},
 	}, func(t *testing.T, c argsCase) {
 		flags, remaining, err := parseDriverArgs(c.args)

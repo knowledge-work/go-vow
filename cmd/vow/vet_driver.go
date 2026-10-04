@@ -92,6 +92,8 @@ func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests b
 	// would keep one cached result per shape of run instead of one per
 	// package.
 	args = append(args, "-vow."+vetAnnotateFlag)
+	// Patterns follow "--" so go vet never reads one as its own flag.
+	args = append(args, "--")
 	args = append(args, vetPatterns(patterns)...)
 	cmd := exec.Command("go", args...)
 	cmd.Env = append(os.Environ(), vetToolEnv+"=1")

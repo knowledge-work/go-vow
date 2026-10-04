@@ -3,7 +3,7 @@
 // Usage:
 //
 //	vow [--changed-files file1.go file2.go ...] [--with-callers]
-//	    [--config-file path | --config-yaml content] [-test] <package>...
+//	    [--config-file path | --config-yaml content] [-test] [--] <package>...
 //
 // Without driver flags, vow lints every non-test Go file in the named
 // packages; -test extends the load to include _test.go files. With
@@ -420,12 +420,14 @@ func loadConfigOverride(flags driverFlags) (*config.Config, error) {
 
 // parseDriverArgs separates vow driver flags from args. It returns the
 // extracted driverFlags (--changed-files / --with-callers /
-// --config-file / --config-yaml / -test) and the residual tokens
-// forwarded to the go/analysis driver. --changed-files collects variadic
-// paths up to the next dash-prefixed token (including "--") or the end
-// of args. --config-file and --config-yaml are mutually exclusive;
-// specifying both is an error. -test (or --test) opts test files into
-// the analysis; without it, the loader excludes them.
+// --config-file / --config-yaml / --vet-mode / -test) and the remaining
+// package patterns. --changed-files collects variadic paths up to the
+// next dash-prefixed token (including "--") or the end of args.
+// --config-file and --config-yaml are mutually exclusive; specifying
+// both is an error. -test (or --test) opts test files into the
+// analysis; without it, the loader excludes them. Any other
+// dash-prefixed token is an unknown-flag error, and every token after
+// "--" is a package pattern, even one that starts with a dash.
 //
 // vow:nil (?) ,?,
 func parseDriverArgs(args []string) (driverFlags, []string, error) {
@@ -459,7 +461,13 @@ func parseDriverArgs(args []string) (driverFlags, []string, error) {
 			flags.IncludeTests = true
 		case "--vet-mode":
 			flags.VetMode = true
+		case "--":
+			remaining = append(remaining, args[i+1:]...)
+			i = len(args)
 		default:
+			if strings.HasPrefix(args[i], "-") {
+				return driverFlags{}, nil, fmt.Errorf("unknown flag %s", args[i])
+			}
 			remaining = append(remaining, args[i])
 		}
 	}
