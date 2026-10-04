@@ -33,22 +33,22 @@ func TestExitCodes(t *testing.T) {
 		"clean package under vet mode": {args: []string{"--vet-mode", "--config-yaml", config, "./clean"}, want: 0},
 		"diagnostic": {
 			args:    []string{"--config-yaml", config, "./leak"},
-			want:    3,
+			want:    1,
 			wantOut: "sentinel error ErrLeak leaked",
 		},
 		"diagnostic under vet mode": {
 			args:    []string{"--vet-mode", "--config-yaml", config, "./leak"},
-			want:    3,
+			want:    1,
 			wantOut: "sentinel error ErrLeak leaked",
 		},
 		"type error": {
 			args:    []string{"--config-yaml", config, "./broken"},
-			want:    1,
+			want:    3,
 			wantOut: "cannot use",
 		},
 		"type error under vet mode": {
 			args:    []string{"--vet-mode", "--config-yaml", config, "./broken"},
-			want:    1,
+			want:    3,
 			wantOut: "cannot use",
 		},
 		"pattern matching no package": {
@@ -58,17 +58,17 @@ func TestExitCodes(t *testing.T) {
 		},
 		"pattern matching no package under vet mode": {
 			args:    []string{"--vet-mode", "--config-yaml", config, "vowexitcode.example/none/..."},
-			want:    1,
+			want:    3,
 			wantOut: "matched no packages",
 		},
 		"pattern naming a missing directory": {
 			args:    []string{"--config-yaml", config, "./missing/..."},
-			want:    1,
+			want:    3,
 			wantOut: "no such file or directory",
 		},
 		"pattern naming a missing directory under vet mode": {
 			args:    []string{"--vet-mode", "--config-yaml", config, "./missing/..."},
-			want:    1,
+			want:    3,
 			wantOut: "no such file or directory",
 		},
 		"rejected command line": {
@@ -102,6 +102,15 @@ func TestExitCodesWhenGoCannotListPackages(t *testing.T) {
 			files:   map[string]string{"go.mod": "module broken.example\n\nrequire (\n"},
 			wantOut: "errors parsing go.mod",
 		},
+		// go/packages reports this one as a package with a load error
+		// unless the load also asks for type sizes.
+		"go.work naming a missing module": {
+			files: map[string]string{
+				"go.mod":  "module work.example\n\ngo 1.25\n",
+				"go.work": "go 1.25\n\nuse (\n\t.\n\t./missing\n)\n",
+			},
+			wantOut: "cannot load module missing listed in go.work file",
+		},
 	}, func(t *testing.T, m moduleCase) {
 		dir := t.TempDir()
 		for name, content := range m.files {
@@ -115,7 +124,7 @@ func TestExitCodesWhenGoCannotListPackages(t *testing.T) {
 		}
 		tabletest.Run(t, map[string]listCase{
 			"default path": {args: []string{"--config-yaml", config, "./..."}, want: 2},
-			"vet mode":     {args: []string{"--vet-mode", "--config-yaml", config, "./..."}, want: 1},
+			"vet mode":     {args: []string{"--vet-mode", "--config-yaml", config, "./..."}, want: 3},
 			// The resolver lists the packages before go vet runs, so vet mode
 			// stops there too.
 			"with callers":                {args: []string{"--config-yaml", config, "--changed-files", changed, "--with-callers"}, want: 2},
@@ -149,12 +158,14 @@ func TestVetModeExitCodesOnUnusableReports(t *testing.T) {
 		t.Setenv("PATH", fakeDir+string(os.PathListSeparator)+os.Getenv("PATH"))
 		out, code := runVowBinaryExit(t, binary, fakeDir, "--vet-mode", "--config-yaml", "{}", "./...")
 		assert.Contains(t, "output", out, c.wantOut)
-		assert.Equal(t, "exit code", code, 1)
+		assert.Equal(t, "exit code", code, 3)
 	})
 }
 
 // TestExitCodesWhenCallerResolutionStops runs --with-callers over
-// modules whose code stops the resolver before the analysis starts.
+// modules whose code stops the resolver before the analysis starts. The
+// run counts as failed, since the code is broken rather than the command
+// line.
 func TestExitCodesWhenCallerResolutionStops(t *testing.T) {
 	binary := buildVowBinary(t)
 	type stopCase struct {
@@ -168,7 +179,7 @@ func TestExitCodesWhenCallerResolutionStops(t *testing.T) {
 			changed: "package p\n\nfunc P() int { return 1 }\n",
 			other:   "packge q\n",
 			wantOut: "prevent complete caller resolution",
-			want:    2,
+			want:    3,
 		},
 		// q has to import p: without a caller the resolver returns before
 		// it parses the changed file, and the analysis reports the error.
@@ -176,7 +187,7 @@ func TestExitCodesWhenCallerResolutionStops(t *testing.T) {
 			changed: "package p\n\nfunc P() int { return 1 +\n}\n",
 			other:   "package q\n\nimport \"callers.example/p\"\n\nvar _ = p.P\n",
 			wantOut: "parse changed files",
-			want:    2,
+			want:    3,
 		},
 	}, func(t *testing.T, c stopCase) {
 		// The go command reports files under the resolved path, and a
@@ -211,10 +222,10 @@ func TestResolveExitCode(t *testing.T) {
 		"no jobs":                           {want: 0},
 		"root without diagnostics":          {jobs: []*driver.Job{{Root: true}}, want: 0},
 		"diagnostic on a dependency only":   {jobs: []*driver.Job{{Diagnostics: reported}}, want: 0},
-		"diagnostic on a root":              {jobs: []*driver.Job{{Root: true, Diagnostics: reported}}, want: 3},
-		"analyzer error":                    {jobs: []*driver.Job{{Err: errors.New("analyzer failed")}}, want: 1},
-		"load error":                        {loadErrors: 1, want: 1},
-		"error alongside a root diagnostic": {jobs: []*driver.Job{{Root: true, Diagnostics: reported}, {Err: errors.New("analyzer failed")}}, want: 1},
+		"diagnostic on a root":              {jobs: []*driver.Job{{Root: true, Diagnostics: reported}}, want: 1},
+		"analyzer error":                    {jobs: []*driver.Job{{Err: errors.New("analyzer failed")}}, want: 3},
+		"load error":                        {loadErrors: 1, want: 3},
+		"error alongside a root diagnostic": {jobs: []*driver.Job{{Root: true, Diagnostics: reported}, {Err: errors.New("analyzer failed")}}, want: 3},
 	}, func(t *testing.T, c exitCodeCase) {
 		assert.Equal(t, "resolveExitCode", resolveExitCode(&driver.Result{Jobs: c.jobs}, c.loadErrors), c.want)
 	})

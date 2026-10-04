@@ -81,7 +81,7 @@ func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests b
 	self, err := os.Executable()
 	if err != nil {
 		os.Stderr.WriteString("vow: locate own binary: " + err.Error() + "\n")
-		return 1
+		return exitFailure
 	}
 	args := []string{"vet", "-json", "-vettool=" + self}
 	if configYAML != "" {
@@ -106,13 +106,13 @@ func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests b
 	if parseErr != nil {
 		os.Stderr.Write(stderr.Bytes())
 		os.Stderr.WriteString("vow: read go vet report: " + parseErr.Error() + "\n")
-		return 1
+		return exitFailure
 	}
 	printed, failed := printVetDiagnostics(report, narrow, includeTests)
 	if failed > 0 {
 		// An analyzer that did not run leaves that package unchecked, so
 		// the run cannot claim a verdict for it.
-		return 1
+		return exitFailure
 	}
 	if runErr != nil {
 		// A partial report is still a failed run: some package did not
@@ -120,10 +120,10 @@ func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests b
 		// an incomplete answer as a complete one.
 		os.Stderr.Write(stderr.Bytes())
 		os.Stderr.WriteString("vow: go vet: " + runErr.Error() + "\n")
-		return 1
+		return exitFailure
 	}
 	if printed > 0 {
-		return 3
+		return exitDiagnostics
 	}
 	return 0
 }
@@ -342,7 +342,7 @@ func vetConfigYAML(flags driverFlags) string {
 		raw, err := os.ReadFile(flags.ConfigFile)
 		if err != nil {
 			os.Stderr.WriteString("vow: --config-file: " + err.Error() + "\n")
-			os.Exit(2)
+			os.Exit(exitNotStarted)
 		}
 		return string(raw)
 	}
