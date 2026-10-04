@@ -67,3 +67,14 @@ func runVowBinary(t *testing.T, binary, dir string, args ...string) string {
 	out, _ := cmd.CombinedOutput()
 	return string(out)
 }
+
+// TestVetModeReadsTokensAfterTheSeparatorAsPatterns pins that a token
+// after "--" reaches go vet as a package pattern, as it does on the
+// default path, rather than as one of go vet's own flags.
+func TestVetModeReadsTokensAfterTheSeparatorAsPatterns(t *testing.T) {
+	binary := buildVowBinary(t)
+	dir, err := filepath.Abs(filepath.Join("testdata", "testflag"))
+	assert.MustNoError(t, "resolve fixture", err)
+	out := runVowBinary(t, binary, dir, "--vet-mode", "--config-yaml", "{}", "--", "-tags=x", "./...")
+	assert.Contains(t, "vet-mode output", out, `malformed import path "-tags=x"`)
+}

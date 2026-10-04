@@ -102,6 +102,35 @@ func TestParseDriverArgs(t *testing.T) {
 			wantFlags:     driverFlags{Changed: cli.ChangedFileSet{Files: []string{"a.go"}}, IncludeTests: true},
 			wantRemaining: []string{"./..."},
 		},
+		"unknown single-dash flag": {
+			args:          []string{"-json", "./..."},
+			wantRemaining: []string{"-json", "./..."},
+		},
+		"unknown double-dash flag": {
+			args:          []string{"--json", "./..."},
+			wantRemaining: []string{"--json", "./..."},
+		},
+		"unknown flag after a package pattern": {
+			args:          []string{"./...", "-bogus"},
+			wantRemaining: []string{"./...", "-bogus"},
+		},
+		"driver flag spelled with an equals sign": {
+			args:          []string{"--config-file=vow.yaml", "./..."},
+			wantRemaining: []string{"--config-file=vow.yaml", "./..."},
+		},
+		"separator before a package pattern": {
+			args:          []string{"--", "./..."},
+			wantRemaining: []string{"--", "./..."},
+		},
+		"dash-prefixed pattern after the separator": {
+			args:          []string{"--", "-weird"},
+			wantRemaining: []string{"--", "-weird"},
+		},
+		"known flag after the separator is a package pattern": {
+			args:          []string{"--", "-test"},
+			wantFlags:     driverFlags{IncludeTests: true},
+			wantRemaining: []string{"--"},
+		},
 	}, func(t *testing.T, c argsCase) {
 		flags, remaining, err := parseDriverArgs(c.args)
 		if c.wantErr != "" {
