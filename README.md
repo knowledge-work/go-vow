@@ -46,12 +46,12 @@ import "errors"
 
 type Record struct{ /* ... */ }
 
-func load(id *string) (*Record, error) { /* ... */ }
+func load(id *string) (*Record, error) { return &Record{}, nil }
 
 // vow:define @Sentinel
 var ErrNotFound = errors.New("not found")
 
-// vow:nil (!) !, ?
+// vow:nil (!) ?, ?
 // vow:emit ErrNotFound
 func Lookup(id *string) (*Record, error) {
     if *id == "" {
@@ -73,10 +73,11 @@ branched on. A caller that only holds the `error` value `Lookup`
 returned never names the sentinel, so the obligation is not carried
 across the call.
 
-The `vow:nil (!) !, ?` signature mirror pins `id` and the first
-return as non-nil and the second return as nillable. A caller
-passing `nil` to `id` is reported at the call site; a body that
-overwrites `id` with `nil` is reported at the assignment.
+The `vow:nil (!) ?, ?` signature mirror declares `id` non-nil and
+both returns nillable, since `Lookup` returns a nil record alongside
+`ErrNotFound`. A caller passing `nil` to `id` is reported at the call
+site; a body that overwrites `id` with `nil` is reported at the
+assignment.
 
 Run the linter:
 
