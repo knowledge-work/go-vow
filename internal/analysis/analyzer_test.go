@@ -9,6 +9,7 @@ import (
 
 	"github.com/knowledge-work/go-vow/internal/assert"
 	"github.com/knowledge-work/go-vow/internal/cli"
+	"github.com/knowledge-work/go-vow/internal/config"
 	"github.com/knowledge-work/go-vow/internal/dsl"
 )
 
@@ -94,4 +95,37 @@ func TestAnalyzerNarrowScope(t *testing.T) {
 // marker shapes that do not describe the enclosing signature.
 func TestAnalyzerNilDeclCompleteness(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), Analyzer, "nilDeclCompleteness")
+}
+
+// TestAnalyzerConfigTypo runs the analyzer over a package whose vow.yaml
+// misspells a key, next to a control whose vow.yaml spells the key
+// correctly and so turns the declaration-completeness rule on.
+func TestAnalyzerConfigTypo(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "configTypo", "configTypoControl")
+}
+
+// TestAnalyzerConfigTypoUnderOverride runs the analyzer with a
+// driver-supplied config, which replaces the per-directory vow.yaml, so
+// a misspelled vow.yaml the run does not read is not reported.
+func TestAnalyzerConfigTypoUnderOverride(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), New(builtinPresets(), &config.Config{}), "configTypoOverridden")
+}
+
+// TestAnalyzerConfigTypoUnderNarrowScope runs with --changed-files naming
+// only b.go of a package under a misspelled vow.yaml, so the report has
+// to sit on a file the narrowing keeps. The vow.yaml misspells two keys
+// so that the want also pins how the report joins the error's lines.
+func TestAnalyzerConfigTypoUnderNarrowScope(t *testing.T) {
+	t.Cleanup(func() { cli.SetActive(cli.ChangedFileSet{}) })
+	testDir := analysistest.TestData()
+	cli.SetActive(cli.ChangedFileSet{Files: []string{filepath.Join(testDir, "src", "configTypoNarrow", "b.go")}})
+	analysistest.Run(t, testDir, Analyzer, "configTypoNarrow")
+}
+
+// TestAnalyzerConfigSyntaxError runs the analyzer over a package whose
+// vow.yaml is not valid YAML, so the error the report carries is one
+// line, next to a package whose vow.yaml holds only a comment, which
+// configures nothing and is not reported.
+func TestAnalyzerConfigSyntaxError(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "configSyntax", "configCommentOnly")
 }
