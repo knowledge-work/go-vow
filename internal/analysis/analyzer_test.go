@@ -98,8 +98,9 @@ func TestAnalyzerNilDeclCompleteness(t *testing.T) {
 }
 
 // TestAnalyzerConfigTypo runs the analyzer over a package whose vow.yaml
-// misspells a key, next to a control whose vow.yaml spells the key
-// correctly and so turns the declaration-completeness rule on.
+// misspells a key, which the analyzer reports, next to a control whose
+// vow.yaml spells the key correctly and so turns the
+// declaration-completeness rule on.
 func TestAnalyzerConfigTypo(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), Analyzer, "configTypo", "configTypoControl")
 }

@@ -6,12 +6,16 @@
 package analysis
 
 import (
+	"go/ast"
+	"strings"
+
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/buildssa"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 
 	"github.com/knowledge-work/go-vow/internal/config"
 	"github.com/knowledge-work/go-vow/internal/dsl"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // Analyzer is the default analyzer configured with the builtin presets.
@@ -53,6 +57,9 @@ func runFunc(presets []*dsl.Preset, resolver *config.Resolver, override *config.
 		state := newPassState(presets, resolver, override)
 		cleanup := registerPassState(pass, state)
 		defer cleanup()
+		// Safe ahead of the marker discovery below: the report has no
+		// Category, so no vow:suppress or vow:use marker can drop it.
+		reportConfigError(pass, state)
 		// Discover caller-authored filter markers (vow:suppress,
 		// vow:use) before any obligation check emits a diagnostic.
 		// The function-level / line-level sets must be populated
@@ -340,4 +347,42 @@ func runFunc(presets []*dsl.Preset, resolver *config.Resolver, override *config.
 		validateClosableLifetime(pass, state)
 		return nil, nil
 	}
+}
+
+// reportConfigError reports, once per package, a vow.yaml the discovery
+// walk finds for the package but cannot read or parse. The checks that
+// read the config fall back to the built-in defaults on the same error,
+// so without this report a misspelled key would drop every setting in
+// the file in silence. The report sits on the package clause of the
+// first file the --changed-files narrowing keeps, so a narrowed run
+// still shows it.
+//
+// The report runs ahead of the checks rather than inside them because
+// they read the config while holding state.mu. vowReport takes that
+// lock for a suppressible Category, so a report given one could not
+// move into them.
+func reportConfigError(pass *analysis.Pass, state *passState) {
+	if state.configOverride != nil || state.configResolver == nil || len(pass.Files) == 0 {
+		return
+	}
+	dir := passPackageDirectory(pass)
+	if dir == "" {
+		return
+	}
+	_, err := state.configResolver.Resolve(dir)
+	if err == nil {
+		return
+	}
+	kept, found := seq.ChainOf(pass.Files...).Find(func(file *ast.File) bool {
+		return !shouldDropByNarrowScope(pass, analysis.Diagnostic{Pos: file.Package})
+	})
+	pos := pass.Files[0].Package
+	if found {
+		pos = kept.Package
+	}
+	// A YAML error lists each rejected field on its own line below a
+	// header line; a diagnostic is one line.
+	lines := seq.ChainOf(strings.Split(err.Error(), "\n")...).Map(strings.TrimSpace).ToSlice()
+	detail := strings.TrimSpace(lines[0] + " " + strings.Join(lines[1:], ", "))
+	vowReportf(pass, pos, "vow[config]: %s; the built-in defaults apply instead", detail)
 }
