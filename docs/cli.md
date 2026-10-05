@@ -1,8 +1,11 @@
 # CLI
 
-The `vow` binary is a `go/analysis` single-checker. Its command-line
-surface is therefore the same as any other Go static analyzer
-delivered via `singlechecker.Main`.
+Run from the command line, `vow` takes only the flags on this page,
+and any other flag stops the run with exit code 2. It drives the
+analyzer itself rather than through `singlechecker.Main`, so
+`singlechecker` flags such as `-c` and `-fix` are not among them. When
+`go vet` runs `vow` as a vettool, `vow` takes the flags `-flags`
+reports instead.
 
 ## Usage
 
@@ -26,25 +29,18 @@ vow main.go util.go       # specific files in the current package
 
 ## Common flags
 
-The `singlechecker` framework exposes a fixed set of flags. The
-most useful ones:
+These flags share their names with other `go/analysis` tools.
 
 | Flag | Purpose |
 |------|---------|
-| `-V` | Print the analyzer version and exit. |
-| `-flags` | List the analyzer's tunable flags as JSON (for tool integration). |
-| `-fix` | Apply the analyzer's suggested fixes. `vow` does not currently emit fixes, so this is a no-op. |
-| `-json` | Emit diagnostics as a JSON document keyed by package. |
-| `-c <n>` | Print `n` lines of context around each diagnostic in the default output mode. |
-| `-test` | Include test files in the analysis. Test files are excluded by default. |
-
-The analyzer itself takes no `-vow.*` flags.
+| `-V=full` | Print a build ID (a hash of the `vow` binary) and exit. `go vet` asks for it in this form to tell when the tool has changed; a bare `-V` is rejected. For the vow release, run `go version -m $(which vow)`. |
+| `-flags` | Print as JSON the flags `vow` accepts as a `go vet` vettool, which differ from the flags on this page. |
+| `-test` | Include test files in the analysis. Test files are excluded by default; the flag takes no value. |
 
 ## Driver flags
 
-`vow` reads its own flags ahead of the `singlechecker` set. They
-control which packages are loaded and where the configuration comes
-from.
+These flags control which packages are loaded, how they are
+analyzed, and where the configuration comes from.
 
 | Flag | Purpose |
 |------|---------|
@@ -150,12 +146,6 @@ Example:
 store.go:14:9: vow[sentinel-error]: sentinel error ErrNotFound leaked: needs observation or explicit propagation
 ```
 
-JSON mode (`-json`) emits a map keyed by package import path; each
-package's value is a list of diagnostics with `posn`, `message`,
-`category`, and (when applicable) `suggested_fixes` fields. The
-shape is the framework's standard format and is compatible with
-tools that already consume `go vet`-style JSON.
-
 ## Exit codes
 
 The framework maps the diagnostic state to a process exit code:
@@ -182,7 +172,9 @@ depends on which stage failed.
 - **Custom presets.** The default `vow` binary embeds the
   `sentinel-error` preset. To enforce custom obligations, build a
   binary that constructs `analysis.New(presets)` over your own
-  preset list and wraps it with `singlechecker.Main`.
+  preset list and wraps it with `singlechecker.Main`. That binary
+  takes the `singlechecker` flags, so the driver flags on this page,
+  such as `--changed-files` and `--config-file`, are not available.
 
 ## See also
 
