@@ -15,6 +15,7 @@ import (
 	"golang.org/x/tools/go/packages"
 
 	"github.com/knowledge-work/go-vow/internal/assert"
+	"github.com/knowledge-work/go-vow/internal/cli"
 	"github.com/knowledge-work/go-vow/internal/driver"
 )
 
@@ -128,7 +129,8 @@ func runVowBinaryStreams(t *testing.T, binary, dir string, args ...string) vowRu
 	t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "GOFLAGS=")
+	// The timing log would add lines to stderr.
+	cmd.Env = append(os.Environ(), "GOFLAGS=", cli.TimingEnvVar+"=")
 	var stdout, stderr bytes.Buffer
 	cmd.Stdout = &stdout
 	cmd.Stderr = &stderr

@@ -10,7 +10,7 @@ reports instead.
 ## Usage
 
 ```sh
-vow [flags] [packages...]
+vow [flags] [--] [packages...]
 ```
 
 Package patterns follow the standard Go tooling conventions —
@@ -33,10 +33,9 @@ These flags share their names with other `go/analysis` tools.
 
 | Flag | Purpose |
 |------|---------|
-| `-V=full` | Print a build ID (a hash of the `vow` binary) and exit. `go vet` asks for it in this form to tell when the tool has changed; a bare `-V` is rejected. For the vow release, run `go version -m $(which vow)`. |
-| `-flags` | Print as JSON the flags `vow` accepts as a `go vet` vettool, which differ from the flags on this page. |
-| `-json` | Print the report, analyzer failures included, on stdout as one JSON document instead of as text on stderr. See [Output format](#output-format). |
-| `-test` | Include test files in the analysis. Test files are excluded by default; the flag takes no value. |
+| `-json` | Print the report, analyzer failures included, on stdout as one JSON document instead of as text on stderr. See [Output format](#output-format). `--json` does the same. |
+| `-test` | Include test files in the analysis. Test files are excluded by default; the flag takes no value. `--test` does the same. |
+| `-h` | Print each flag on this page with a one-line summary on stdout, and exit 0. `-help` and `--help` do the same. |
 
 ## Driver flags
 
@@ -49,7 +48,7 @@ analyzed, and where the configuration comes from.
 | `--with-callers` | Extend the run with the caller-side checks. Requires `--changed-files`, and replaces any package arguments with the changed packages plus their direct callers. Using it alone exits with code 2. |
 | `--config-file <path>` | Read configuration from one `vow.yaml` file for the whole run, instead of discovering one per directory. |
 | `--config-yaml <content>` | Read the same configuration from an inline string. Passing both config flags is an error. |
-| `--vet-mode` | Run the analysis through `go vet` instead of loading the packages in one process, so each package's facts come from the Go build cache. See [Vet mode](#vet-mode). |
+| `--vet-mode` | Run the analysis through `go vet` instead of loading the packages in one process, so each package's facts come from the Go build cache. Requires `--config-file` or `--config-yaml`. See [Vet mode](#vet-mode). |
 
 ### Vet mode
 
@@ -86,6 +85,16 @@ Two consequences are worth knowing before turning it on:
   carries the inputs the narrowing needs — whether it sits inside a call
   and where that call's callee is declared — and vow applies the same
   rule the default path applies inside the analyzer.
+
+## Vettool flags
+
+`go vet` passes these when it runs `vow` as its vettool. They also work
+on their own.
+
+| Flag | Purpose |
+|------|---------|
+| `-V=full` | Print a build ID (a hash of the `vow` binary) and exit. `go vet` asks for it in this form to tell when the tool has changed; a bare `-V` is rejected. For the vow release, run `go version -m $(which vow)`. |
+| `-flags` | Print as JSON the flags `vow` accepts as a `go vet` vettool, which differ from the flags on this page. |
 
 ## Configuration
 

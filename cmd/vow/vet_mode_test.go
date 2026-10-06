@@ -17,14 +17,21 @@ func TestRunsAsVettool(t *testing.T) {
 		want   bool
 	}
 	tabletest.Run(t, map[string]vettoolCase{
-		"flag list request":                    {args: []string{"-flags"}, want: true},
-		"build identity request":               {args: []string{"-V=full"}, want: true},
-		"unit config alone":                    {args: []string{"/tmp/b001/vet.cfg"}, want: true},
-		"unit config beside a forwarded flag":  {args: []string{"-json", "/tmp/b001/vet.cfg"}, want: true},
-		"unit config under the wrapper marker": {args: []string{"-json", "/tmp/b001/vet.cfg"}, marked: true, want: true},
-		"driver config path ending in cfg":     {args: []string{"--config-file", "policy.cfg", "./..."}, want: false},
-		"driver run":                           {args: []string{"--changed-files", "a.go", "--with-callers", "./..."}, want: false},
-		"driver run with no arguments":         {args: nil, want: false},
+		"flag list request":                     {args: []string{"-flags"}, want: true},
+		"build identity request":                {args: []string{"-V=full"}, want: true},
+		"unit config alone":                     {args: []string{"/tmp/b001/vet.cfg"}, want: true},
+		"unit config beside a forwarded flag":   {args: []string{"-json", "/tmp/b001/vet.cfg"}, want: true},
+		"unit config under the wrapper marker":  {args: []string{"-json", "/tmp/b001/vet.cfg"}, marked: true, want: true},
+		"driver config path ending in cfg":      {args: []string{"--config-file", "policy.cfg", "./..."}, want: false},
+		"driver run":                            {args: []string{"--changed-files", "a.go", "--with-callers", "./..."}, want: false},
+		"driver run with no arguments":          {args: nil, want: false},
+		"help beside the flag list request":     {args: []string{"-h", "-flags"}, want: false},
+		"help beside a unit config":             {args: []string{"-help", "/tmp/b001/vet.cfg"}, want: false},
+		"help under the wrapper marker":         {args: []string{"--help", "/tmp/b001/vet.cfg"}, marked: true, want: true},
+		"help after the flag list request":      {args: []string{"-flags", "-h"}, want: true},
+		"help after the separator":              {args: []string{"-V=full", "--", "-h"}, want: true},
+		"help as a pattern after the separator": {args: []string{"--", "-h", "-flags"}, want: true},
+		"help after a forwarded flag":           {args: []string{"-json", "-h", "/tmp/b001/vet.cfg"}, want: false},
 	}, func(t *testing.T, c vettoolCase) {
 		assert.Equal(t, fmt.Sprintf("runsAsVettool(%q, marked=%v)", c.args, c.marked),
 			runsAsVettool(c.args, c.marked), c.want)

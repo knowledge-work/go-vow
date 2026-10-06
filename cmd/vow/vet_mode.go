@@ -40,11 +40,20 @@ const vetAnnotateFlag = "narrow-annotate"
 // invocation carries no driver flag at all, which is what keeps a
 // direct `go vet -vettool=vow` working.
 //
+// A help flag without the marker means a person, since go vet never asks
+// for help. It wins only where parseDriverArgs reads it as a flag: before
+// "--" and before any vettool flag, which the parser would reject first.
+//
 // vow:nil (?,)
 func runsAsVettool(args []string, marked bool) bool {
-	if slices.ContainsFunc(args, func(arg string) bool {
-		return arg == "-flags" || strings.HasPrefix(arg, "-V=")
-	}) {
+	flagsEnd := slices.IndexFunc(args, func(arg string) bool { return arg == "--" || isVettoolFlag(arg) })
+	if flagsEnd < 0 {
+		flagsEnd = len(args)
+	}
+	if !marked && slices.ContainsFunc(args[:flagsEnd], isHelpFlag) {
+		return false
+	}
+	if slices.ContainsFunc(args, isVettoolFlag) {
 		return true
 	}
 	if !marked && hasDriverFlag(args) {
@@ -53,6 +62,14 @@ func runsAsVettool(args []string, marked bool) bool {
 	return slices.ContainsFunc(args, func(arg string) bool {
 		return strings.HasSuffix(arg, ".cfg")
 	})
+}
+
+// isVettoolFlag reports whether arg asks for the flag list or the build
+// identity, the two vettool shapes that are flags.
+//
+// vow:nil ()
+func isVettoolFlag(arg string) bool {
+	return arg == "-flags" || strings.HasPrefix(arg, "-V=")
 }
 
 // hasDriverFlag reports whether args carry a two-dash vow driver flag.

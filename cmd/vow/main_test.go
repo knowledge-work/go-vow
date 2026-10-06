@@ -115,6 +115,22 @@ func TestParseDriverArgs(t *testing.T) {
 			wantFlags:     driverFlags{JSON: true},
 			wantRemaining: []string{"./..."},
 		},
+		"help ignores the arguments after it": {
+			args:      []string{"-h", "--with-callers", "-bogus"},
+			wantFlags: driverFlags{Help: true},
+		},
+		"help after a package pattern": {
+			args:      []string{"./...", "--help"},
+			wantFlags: driverFlags{Help: true},
+		},
+		"vettool flag, which runsAsVettool takes before the parser": {
+			args:    []string{"-flags"},
+			wantErr: "unknown flag -flags",
+		},
+		"unknown flag before help": {
+			args:    []string{"-bogus", "-h"},
+			wantErr: "unknown flag -bogus",
+		},
 		"json output spelled with two dashes": {
 			args:          []string{"--json", "./..."},
 			wantFlags:     driverFlags{JSON: true},
