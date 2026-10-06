@@ -55,10 +55,10 @@ func runsAsVettool(args []string, marked bool) bool {
 	})
 }
 
-// hasDriverFlag reports whether args carry a vow driver flag. Every
-// driver flag is spelled with two dashes and every flag the go command
-// forwards to a vettool with one, so the prefix separates the two
-// callers without naming each flag.
+// hasDriverFlag reports whether args carry a two-dash vow driver flag.
+// The go command forwards flags to a vettool with one dash, so a two-dash
+// flag can only come from a person. The one-dash driver flags (-test,
+// -json) do not decide: the go command forwards -json itself.
 //
 // vow:nil (?)
 func hasDriverFlag(args []string) bool {

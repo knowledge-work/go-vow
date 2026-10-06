@@ -35,6 +35,7 @@ These flags share their names with other `go/analysis` tools.
 |------|---------|
 | `-V=full` | Print a build ID (a hash of the `vow` binary) and exit. `go vet` asks for it in this form to tell when the tool has changed; a bare `-V` is rejected. For the vow release, run `go version -m $(which vow)`. |
 | `-flags` | Print as JSON the flags `vow` accepts as a `go vet` vettool, which differ from the flags on this page. |
+| `-json` | Print the report, analyzer failures included, on stdout as one JSON document instead of as text on stderr. See [Output format](#output-format). |
 | `-test` | Include test files in the analysis. Test files are excluded by default; the flag takes no value. |
 
 ## Driver flags
@@ -57,8 +58,9 @@ analyzes one package at a time, stores each package's facts in the build
 cache, and reuses them while the package's sources and dependencies are
 unchanged — where the default driver loads the dependency closure and
 analyzes it again on every run. Both paths run the same analyzer over
-the same packages and print in the same `position: message` shape on
-stderr; what changes is how much is loaded to produce the report.
+the same packages and report the same diagnostics, as `position:
+message` lines on stderr or, under `-json`, as a JSON document on
+stdout; what changes is how much is loaded to produce the report.
 
 Two consequences are worth knowing before turning it on:
 
@@ -145,6 +147,46 @@ Example:
 ```
 store.go:14:9: vow[sentinel-error]: sentinel error ErrNotFound leaked: needs observation or explicit propagation
 ```
+
+With `-json`, `vow` prints one JSON document on stdout in the shape
+`go vet -json` uses: an object keyed by package ID and then by
+analyzer name, whose value is either the list of diagnostics or an
+object with an `error` field when the analyzer failed on that
+package. A package with nothing to report is left out, so a clean run
+prints `{}`.
+
+The exit code is the one the run would have without `-json`. Read it
+before the document: under `--vet-mode`, a failure the go command
+reports itself, such as a package that does not type-check, goes to
+stderr rather than into the document, which can then be `{}`. When
+`vow` stops on an error before analyzing anything (a bad flag, for
+instance), or cannot run the analysis or, under `--vet-mode`, read the
+report `go vet` returns, it prints no document and says why on stderr.
+A run whose `--changed-files` resolve to no lintable package is not
+such an error: it prints `{}` and exits 0.
+
+```json
+{
+	"example.com/store": {
+		"vow": [
+			{
+				"category": "must-consume:ErrNotFound",
+				"posn": "/repo/store/store.go:14:9",
+				"end": "/repo/store/store.go:14:9",
+				"message": "vow[sentinel-error]: sentinel error ErrNotFound leaked: needs observation or explicit propagation"
+			}
+		]
+	}
+}
+```
+
+The keys are package IDs as each path's loader names them. Under
+`-test`, the default path analyzes a package that has test files both
+on its own and compiled together with them, keying the second
+`example.com/store [example.com/store.test]`, so a diagnostic in a
+non-test file is listed under both keys. `--vet-mode` analyzes only the
+package compiled with its test files, keyed `example.com/store`, and
+lists each diagnostic once.
 
 ## Exit codes
 

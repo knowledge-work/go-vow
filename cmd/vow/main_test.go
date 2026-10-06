@@ -103,12 +103,22 @@ func TestParseDriverArgs(t *testing.T) {
 			wantRemaining: []string{"./..."},
 		},
 		"unknown single-dash flag": {
-			args:    []string{"-json", "./..."},
-			wantErr: "unknown flag -json",
+			args:    []string{"-fix", "./..."},
+			wantErr: "unknown flag -fix",
 		},
 		"unknown double-dash flag": {
-			args:    []string{"--json", "./..."},
-			wantErr: "unknown flag --json",
+			args:    []string{"--fix", "./..."},
+			wantErr: "unknown flag --fix",
+		},
+		"json output": {
+			args:          []string{"-json", "./..."},
+			wantFlags:     driverFlags{JSON: true},
+			wantRemaining: []string{"./..."},
+		},
+		"json output spelled with two dashes": {
+			args:          []string{"--json", "./..."},
+			wantFlags:     driverFlags{JSON: true},
+			wantRemaining: []string{"./..."},
 		},
 		"unknown flag after a package pattern": {
 			args:    []string{"./...", "-bogus"},

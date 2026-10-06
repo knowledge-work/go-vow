@@ -3,7 +3,8 @@
 // Usage:
 //
 //	vow [--changed-files file1.go file2.go ...] [--with-callers]
-//	    [--config-file path | --config-yaml content] [-test] [--] <package>...
+//	    [--config-file path | --config-yaml content] [-test] [-json]
+//	    [--] <package>...
 //
 // Without driver flags, vow lints every non-test Go file in the named
 // packages; -test extends the load to include _test.go files. With
@@ -22,6 +23,9 @@
 // mutually exclusive — adopters who want repo-tracked policy choose
 // --config-file, and adopters who want an ad-hoc override (e.g. a CI step
 // that opts a project out for one job) choose --config-yaml.
+//
+// -json prints the diagnostics and any analyzer failure on stdout as JSON
+// instead of as text on stderr.
 //
 // Caller-resolver knobs (`caller_resolver.*` in the config) are
 // consulted only through `--config-file` / `--config-yaml`;
@@ -58,6 +62,7 @@ type driverFlags struct {
 	ConfigYAML   string
 	IncludeTests bool
 	VetMode      bool
+	JSON         bool
 }
 
 func main() {
@@ -127,6 +132,9 @@ func main() {
 			os.Stderr.WriteString(fmt.Sprintf(
 				"vow: --changed-files (%d file(s)) resolved to no lintable package; nothing to lint\n",
 				len(flags.Changed.Files)))
+			if flags.JSON {
+				os.Stdout.Write(jsonReport(nil))
+			}
 			os.Exit(0)
 		}
 		remaining = narrow
@@ -145,7 +153,7 @@ func main() {
 			os.Stderr.WriteString("vow: --vet-mode requires --config-file or --config-yaml; the per-directory vow.yaml walk cannot run under it\n")
 			os.Exit(2)
 		}
-		os.Exit(runVetPipeline(vetConfigYAML(flags), flags.Changed, flags.IncludeTests, remaining))
+		os.Exit(runVetPipeline(vetConfigYAML(flags), flags.Changed, flags.IncludeTests, remaining, flags.JSON))
 	}
 	timing.LogEntry("PHASE=driver.Run.entry remaining=%v", remaining)
 
@@ -182,6 +190,11 @@ func main() {
 	if err != nil {
 		os.Stderr.WriteString("vow: analyze: " + err.Error() + "\n")
 		os.Exit(1)
+	}
+
+	if flags.JSON {
+		os.Stdout.Write(jsonReport(driverReport(result)))
+		os.Exit(resolveExitCode(result, loadErrCount))
 	}
 
 	// Buffer diagnostics so stderr keeps its Closable obligation
@@ -420,12 +433,13 @@ func loadConfigOverride(flags driverFlags) (*config.Config, error) {
 
 // parseDriverArgs separates vow driver flags from args. It returns the
 // extracted driverFlags (--changed-files / --with-callers /
-// --config-file / --config-yaml / --vet-mode / -test) and the remaining
-// package patterns. --changed-files collects variadic paths up to the
+// --config-file / --config-yaml / --vet-mode / -test / -json) and the
+// remaining package patterns. --changed-files collects variadic paths up to the
 // next dash-prefixed token (including "--") or the end of args.
 // --config-file and --config-yaml are mutually exclusive; specifying
 // both is an error. -test (or --test) opts test files into the
-// analysis; without it, the loader excludes them. Any other
+// analysis; without it, the loader excludes them. -json (or --json)
+// switches the report to JSON on stdout. Any other
 // dash-prefixed token is an unknown-flag error, and every token after
 // "--" is a package pattern, even one that starts with a dash.
 //
@@ -459,6 +473,8 @@ func parseDriverArgs(args []string) (driverFlags, []string, error) {
 			flags.ConfigYAML = args[i]
 		case "-test", "--test":
 			flags.IncludeTests = true
+		case "-json", "--json":
+			flags.JSON = true
 		case "--vet-mode":
 			flags.VetMode = true
 		case "--":
