@@ -12,7 +12,10 @@ vow [flags] [packages...]
 
 Package patterns follow the standard Go tooling conventions —
 relative paths, `./...`, import paths, and explicit file lists are
-all accepted.
+all accepted. An argument `--` ends vow's flags and every argument
+after it is a package pattern; use it to name packages after
+`--changed-files`, which otherwise reads every following argument up
+to the next flag as a changed file.
 
 ```sh
 vow ./...                 # every package in the module
