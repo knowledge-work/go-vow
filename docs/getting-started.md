@@ -30,7 +30,7 @@ var ErrNotFound = errors.New("not found")
 // authorizes that propagation; without it, vow would report a
 // leak at the return.
 //
-// vow:cond * -> ErrNotFound | nil
+// vow:cond * -> _, ErrNotFound | nil
 func Lookup(id string) (string, error) {
     if id == "" {
         return "", ErrNotFound
@@ -86,7 +86,9 @@ annotations:
 - `// vow:cond <param-req> -> <return-req>` on a `func`
   declares a case-style contract: the parameter requirement binds
   to the function's arguments by signature order, the return
-  requirement describes the return positions. `vow:cond X` is
+  requirement describes the return positions in order, one entry
+  per return value, with `_` for a position that carries no tracked
+  subject. `vow:cond X` is
   the sugar for the trivial wildcard parameter requirement
   (`vow:cond * -> X`). Both forms authorise chain
   propagation when the return requirement lists the concrete
