@@ -577,8 +577,10 @@ parameter's nullness unwritten.
 The completeness demand is off unless the scope sets
 `nil_decl.require_declarations` in its `vow.yaml`, and it exempts
 the positions whose nilness is not the author's to state —
-`error`, `context.Context`, the empty interface, and unsubstituted
-type parameters — along with generated files. See the [annotations
+`error`, `context.Context`, the testing handles (`*testing.T`,
+`*testing.B`, `*testing.F`, `*testing.M`, `*testing.PB`, and
+`testing.TB`), the empty interface, and unsubstituted type
+parameters — along with generated files. See the [annotations
 guide](annotations.md#declaration-completeness) for the authoring
 view.
 

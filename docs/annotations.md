@@ -921,8 +921,11 @@ empty-expression exception — still reports the parameter.
 Four exemptions keep the demand where an author has something to say:
 
 - **Convention-bearing types.** `error` (nil means success),
-  `context.Context`, and the empty interface carry a Go-wide nilness
-  convention that a per-position decl would only restate.
+  `context.Context`, the empty interface, and the testing handles
+  carry a Go-wide nilness convention that a per-position decl would
+  only restate. The testing handles are `*testing.T`, `*testing.B`,
+  `*testing.F`, `*testing.M`, `*testing.PB`, and `testing.TB`, which
+  the test runner supplies.
 - **Type parameters.** An unsubstituted `T` may be instantiated with
   `int`, so its constraint — not the author — decides whether nil is
   representable.

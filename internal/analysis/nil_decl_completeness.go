@@ -225,21 +225,34 @@ func positionNeedsDecl(t types.Type) bool {
 // typeCarriesNilnessConvention reports whether a Go-wide convention
 // already settles t's nilness, leaving a per-position decl with
 // nothing to add: `error` (nil is the success case),
-// `context.Context` (callers pass a live context, never nil), and the
-// empty interface (no shape to constrain, so neither token reads as
-// a contract).
+// `context.Context` (callers pass a live context, never nil), the
+// testing handles (`*testing.T`, `*testing.B`, `*testing.F`,
+// `*testing.M`, `*testing.PB`, and `testing.TB`, which the test runner
+// supplies live), and the empty interface (no shape to constrain, so
+// neither token reads as a contract).
 func typeCarriesNilnessConvention(t types.Type) bool {
-	if named, ok := t.(*types.Named); ok {
-		obj := named.Obj()
-		if obj.Name() == "error" && obj.Pkg() == nil {
-			return true
-		}
-		if obj.Name() == "Context" && obj.Pkg() != nil && obj.Pkg().Path() == "context" {
-			return true
-		}
+	if ptr, ok := t.(*types.Pointer); ok {
+		return isNamedIn(ptr.Elem(), "testing", "T", "B", "F", "M", "PB")
+	}
+	if named, ok := t.(*types.Named); ok && named.Obj().Name() == "error" && named.Obj().Pkg() == nil {
+		return true
+	}
+	if isNamedIn(t, "context", "Context") || isNamedIn(t, "testing", "TB") {
+		return true
 	}
 	iface, ok := t.Underlying().(*types.Interface)
 	return ok && iface.Empty()
+}
+
+// isNamedIn reports whether t is a named type declared in the package
+// at pkgPath under one of names.
+func isNamedIn(t types.Type, pkgPath string, names ...string) bool {
+	named, ok := t.(*types.Named)
+	if !ok {
+		return false
+	}
+	obj := named.Obj()
+	return obj.Pkg() != nil && obj.Pkg().Path() == pkgPath && slices.Contains(names, obj.Name())
 }
 
 // describePosition names a position by its declared identifier when it
