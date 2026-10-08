@@ -218,3 +218,133 @@ func callerPathRuleSilent(wrap *ErrWrapper) {
 	}
 	_ = foo
 }
+
+// otherErr is the error source for the fixtures below.
+func otherErr() error { return nil }
+
+// callerErrGuardInIfBodyBesideUnrelatedVar is the control for the
+// shadow fixtures: the guards sit in an if-body next to a variable of
+// another name, so the pairing with the outer err still holds.
+func callerErrGuardInIfBodyBesideUnrelatedVar(c bool) {
+	foo, err := NewFooBicond()
+	if c {
+		var other = otherErr()
+		_ = other
+		if err != nil {
+			return
+		}
+		if foo == nil { // want `vow\[nil-safety\]: guard on foo is dead \(impossible\); vow:cond rule .* on NewFooBicond narrows return position 1 to non-nil once the guard on err short-circuits`
+			return
+		}
+	}
+	_ = foo
+}
+
+// callerGuardAfterErrShadowInIfBody pins that a shadow ends with its
+// block: the err-guard after the if-body reads the err NewFooBicond
+// returned, so the guard on foo is dead.
+func callerGuardAfterErrShadowInIfBody(c bool) {
+	foo, err := NewFooBicond()
+	if c {
+		var err = otherErr()
+		_ = err
+	}
+	if err != nil {
+		return
+	}
+	if foo == nil { // want `vow\[nil-safety\]: guard on foo is dead \(impossible\); vow:cond rule .* on NewFooBicond narrows return position 1 to non-nil once the guard on err short-circuits`
+		return
+	}
+	_ = foo
+}
+
+// callerVarShadowedErrGuardSilent declares a new err inside the
+// if-body, so the inner err-guard says nothing about the err
+// NewFooBicond returned, and foo may be nil.
+func callerVarShadowedErrGuardSilent(c bool) {
+	foo, err := NewFooBicond()
+	if c {
+		var err = otherErr()
+		if err != nil {
+			return
+		}
+		if foo == nil {
+			return
+		}
+	}
+	_ = err
+	_ = foo
+}
+
+// callerVarShadowedFooGuardSilent narrows foo through the err-guard
+// and then declares a new foo inside the if-body, which the inner
+// guard checks.
+func callerVarShadowedFooGuardSilent(c bool) {
+	foo, err := NewFooBicond()
+	if err != nil {
+		return
+	}
+	if c {
+		var foo *Foo
+		if foo == nil {
+			return
+		}
+		_ = foo
+	}
+	_ = foo
+}
+
+// callerGuardBesideShadowedErr narrows foo through the err-guard and
+// then shadows err inside the if-body. The shadow leaves foo as it
+// was, so the guard on foo is still dead.
+func callerGuardBesideShadowedErr(c bool) {
+	foo, err := NewFooBicond()
+	if err != nil {
+		return
+	}
+	if c {
+		var err = otherErr()
+		_ = err
+		if foo == nil { // want `vow\[nil-safety\]: guard on foo is dead \(impossible\); vow:cond rule .* on NewFooBicond narrows return position 1 to non-nil once the guard on err short-circuits`
+			return
+		}
+	}
+	_ = foo
+}
+
+// callerGuardAfterReassignedErrSilent reassigns err after the
+// err-guard, which drops the cond binding paired with err even once
+// it is narrowed, so the dead guard on foo goes unreported.
+func callerGuardAfterReassignedErrSilent() {
+	foo, err := NewFooBicond()
+	if err != nil {
+		return
+	}
+	err = otherErr()
+	_ = err
+	if foo == nil {
+		return
+	}
+	_ = foo
+}
+
+// callerRepeatedGuardBesideShadowedErrSilent guards foo twice after
+// shadowing err inside the if-body. The second guard is dead once the
+// first one returns. The shadow drops the pending cond binding paired
+// with err, so the first guard cannot promote it and the second goes
+// unreported.
+func callerRepeatedGuardBesideShadowedErrSilent(c bool) {
+	foo, err := NewFooBicond()
+	if c {
+		var err = otherErr()
+		_ = err
+		if foo == nil {
+			return
+		}
+		if foo == nil {
+			return
+		}
+	}
+	_ = err
+	_ = foo
+}
