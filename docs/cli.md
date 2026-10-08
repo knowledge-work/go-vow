@@ -155,17 +155,33 @@ tools that already consume `go vet`-style JSON.
 
 ## Exit codes
 
-The framework maps the diagnostic state to a process exit code:
+`vow` maps the outcome of a run to a process exit code. Diagnostics
+and failures map to the same codes whether or not `--vet-mode` is
+set:
 
 | Code | Meaning |
 |------|---------|
-| `0`  | No diagnostics fired. |
-| `1`  | One or more diagnostics fired. |
-| `3`  | The analyzer failed to run (e.g. a preset failed to load). |
+| `0`  | The run completed and reported no diagnostics. |
+| `1`  | The run completed and reported one or more diagnostics. |
+| `2`  | vow stopped before analyzing anything: an invalid flag or configuration, a go command that could not list the packages (for example, on a broken `go.mod`), or patterns that matched no package. |
+| `3`  | The run failed: a package had load or type errors, or the analysis or vow itself failed. |
 
-Build failures and parse errors in the analyzed packages propagate
-through the framework and produce a non-zero exit; the precise code
-depends on which stage failed.
+A failure outranks diagnostics: a run that could not analyze every
+package exits `3` even when it reported diagnostics, because its
+report is incomplete. A problem the go command reports as a package
+with a load error rather than as a failure to list also exits `3`,
+for example a pattern naming a directory that does not exist, such as
+`./typo/...`.
+
+Running `go vet -vettool=$(which vow)` yourself is different: the go
+command sets the exit code rather than vow, and exits `1` for
+diagnostics and failures alike. `--vet-mode` runs `go vet` too, but
+vow reads its report and sets the code from the table above. When the
+go command cannot list the packages or the patterns match none,
+`go vet` reports a failure, so `--vet-mode` exits `3` where a run
+without it exits `2`. Under `--with-callers` vow lists the packages
+itself before `go vet` runs, so a go command that cannot list them
+exits `2` in both modes.
 
 ## Integration
 

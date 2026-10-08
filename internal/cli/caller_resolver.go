@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"slices"
 	"sort"
@@ -24,6 +25,11 @@ type ScopePackages struct {
 	Changed []string
 	Callers []string
 }
+
+// ErrListPackages marks a resolution that stopped because the go
+// command could not list the module's packages. Any other error means
+// the module's code is broken or the resolver itself failed.
+var ErrListPackages = errors.New("go command could not list the packages")
 
 // ResolveScopePackages resolves the analyzer-scope set in two
 // phases, neither of which type-checks anything.
@@ -79,14 +85,17 @@ func ResolveScopePackages(changedFiles []string, excludePackageSuffixes []string
 	defer timing.LogPhase("ResolveScopePackages.total", overall)
 
 	phase1Cfg := &packages.Config{
-		Mode:  packages.NeedName | packages.NeedCompiledGoFiles | packages.NeedImports,
+		// NeedTypesSizes makes Load fail, as the analysis load does, on a
+		// go.work naming a missing module; without it, go/packages turns the
+		// go command's failure to list into a load error.
+		Mode:  packages.NeedName | packages.NeedCompiledGoFiles | packages.NeedImports | packages.NeedTypesSizes,
 		Tests: true,
 	}
 	phase1Start := time.Now()
 	phase1Pkgs, err := packages.Load(phase1Cfg, "./...")
 	timing.LogPhase("phase1.packages.Load", phase1Start)
 	if err != nil {
-		return nil, fmt.Errorf("load packages (phase 1): %w", err)
+		return nil, fmt.Errorf("load packages (phase 1): %w: %w", ErrListPackages, err)
 	}
 	if errCount := countLoadErrors(phase1Pkgs); errCount > 0 {
 		return nil, fmt.Errorf("load packages (phase 1): %d load error(s) prevent complete caller resolution", errCount)

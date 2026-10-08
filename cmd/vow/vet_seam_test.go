@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,9 +62,22 @@ func buildVowBinary(t *testing.T) string {
 // so the exit status is not an error here.
 func runVowBinary(t *testing.T, binary, dir string, args ...string) string {
 	t.Helper()
+	out, _ := runVowBinaryExit(t, binary, dir, args...)
+	return out
+}
+
+// runVowBinaryExit runs the built binary in dir and returns everything
+// it wrote and its exit code. A binary the OS cannot execute stops the
+// test, since it has no exit code.
+func runVowBinaryExit(t *testing.T, binary, dir string, args ...string) (string, int) {
+	t.Helper()
 	cmd := exec.Command(binary, args...)
 	cmd.Dir = dir
 	cmd.Env = append(os.Environ(), "GOFLAGS=")
-	out, _ := cmd.CombinedOutput()
-	return string(out)
+	out, err := cmd.CombinedOutput()
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) {
+		assert.MustNoError(t, "run vow", err)
+	}
+	return string(out), cmd.ProcessState.ExitCode()
 }

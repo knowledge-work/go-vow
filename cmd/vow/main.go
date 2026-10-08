@@ -34,6 +34,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os"
 	"slices"
@@ -60,6 +61,14 @@ type driverFlags struct {
 	VetMode      bool
 }
 
+// Exit codes other than 0. docs/cli.md documents them; change both
+// together.
+const (
+	exitDiagnostics = 1 // the run completed and reported diagnostics
+	exitNotStarted  = 2 // vow stopped before analyzing anything, e.g. on an invalid flag
+	exitFailure     = 3 // a package had load or type errors, or the analysis or vow itself failed
+)
+
 func main() {
 	if runsAsVettool(os.Args[1:], os.Getenv(vetToolEnv) != "") {
 		runVettool()
@@ -73,7 +82,7 @@ func main() {
 		// Write directly through *os.File to keep the Closable obligation on
 		// stderr rather than passing it as an io.Writer.
 		os.Stderr.WriteString("vow: " + err.Error() + "\n")
-		os.Exit(2)
+		os.Exit(exitNotStarted)
 	}
 	if len(flags.Changed.Files) > 0 {
 		validateStart := time.Now()
@@ -81,7 +90,7 @@ func main() {
 		timing.LogPhase("ValidateChangedFiles", validateStart)
 		if err != nil {
 			os.Stderr.WriteString("vow: --changed-files: " + err.Error() + "\n")
-			os.Exit(2)
+			os.Exit(exitNotStarted)
 		}
 		flags.Changed.Files = absFiles
 	}
@@ -90,7 +99,7 @@ func main() {
 	timing.LogPhase("loadConfigOverride", configStart)
 	if err != nil {
 		os.Stderr.WriteString("vow: " + err.Error() + "\n")
-		os.Exit(2)
+		os.Exit(exitNotStarted)
 	}
 	if flags.Changed.WithCallers && len(flags.Changed.Files) > 0 {
 		excludeSuffixes := callerResolverExcludeSuffixes(override)
@@ -99,7 +108,7 @@ func main() {
 		timing.LogPhase("ResolveScopePackages.outer", resolveStart)
 		if err != nil {
 			os.Stderr.WriteString("vow: resolve callers: " + err.Error() + "\n")
-			os.Exit(2)
+			os.Exit(resolveCallersExitCode(err))
 		}
 		if scope != nil {
 			flags.Changed.CallerPackages = scope.Callers
@@ -143,7 +152,7 @@ func main() {
 		// the module.
 		if flags.ConfigFile == "" && flags.ConfigYAML == "" {
 			os.Stderr.WriteString("vow: --vet-mode requires --config-file or --config-yaml; the per-directory vow.yaml walk cannot run under it\n")
-			os.Exit(2)
+			os.Exit(exitNotStarted)
 		}
 		os.Exit(runVetPipeline(vetConfigYAML(flags), flags.Changed, flags.IncludeTests, remaining))
 	}
@@ -165,11 +174,11 @@ func main() {
 	timing.LogPhase("packages.Load", loadStart)
 	if err != nil {
 		os.Stderr.WriteString("vow: load packages: " + err.Error() + "\n")
-		os.Exit(2)
+		os.Exit(exitNotStarted)
 	}
 	if len(roots) == 0 {
 		os.Stderr.WriteString("vow: " + strings.Join(remaining, " ") + " matched no packages\n")
-		os.Exit(2)
+		os.Exit(exitNotStarted)
 	}
 	loadErrCount := packages.PrintErrors(loaded)
 
@@ -181,7 +190,7 @@ func main() {
 	timing.LogPhase("driver.Run", analyzeStart)
 	if err != nil {
 		os.Stderr.WriteString("vow: analyze: " + err.Error() + "\n")
-		os.Exit(1)
+		os.Exit(exitFailure)
 	}
 
 	// Buffer diagnostics so stderr keeps its Closable obligation
@@ -189,7 +198,7 @@ func main() {
 	var diagBuf bytes.Buffer
 	if err := driver.PrintDiagnostics(&diagBuf, result); err != nil {
 		os.Stderr.WriteString("vow: print diagnostics: " + err.Error() + "\n")
-		os.Exit(1)
+		os.Exit(exitFailure)
 	}
 	os.Stderr.Write(diagBuf.Bytes())
 
@@ -350,9 +359,10 @@ func matchesScopePrefix(path string, prefixes []string) bool {
 	return false
 }
 
-// resolveExitCode maps a run's outcome onto the three-tier
-// convention: 1 when any load or analyzer step failed, 3 when a
-// clean run surfaced at least one root diagnostic, 0 otherwise.
+// resolveExitCode maps a run's outcome onto the exit codes:
+// exitFailure when any load or analyzer step failed, exitDiagnostics
+// when a run without failures reported at least one root diagnostic, 0
+// otherwise.
 // Only root diagnostics count; counting runs before deduplication
 // so a diagnostic reported through two roots contributes once per
 // root.
@@ -371,12 +381,21 @@ func resolveExitCode(r *driver.Result, loadErrCount int) int {
 	}
 	switch {
 	case numErrors > 0:
-		return 1
+		return exitFailure
 	case rootDiags > 0:
-		return 3
+		return exitDiagnostics
 	default:
 		return 0
 	}
+}
+
+// resolveCallersExitCode separates a go command that could not list the
+// packages from every other stop, which leaves the run failed.
+func resolveCallersExitCode(err error) int {
+	if errors.Is(err, cli.ErrListPackages) {
+		return exitNotStarted
+	}
+	return exitFailure
 }
 
 // callerResolverExcludeSuffixes returns the import-path suffixes
