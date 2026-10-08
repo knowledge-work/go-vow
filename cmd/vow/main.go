@@ -2,8 +2,9 @@
 //
 // Usage:
 //
-//	vow [--changed-files file1.go file2.go ...] [--with-callers]
-//	    [--config-file path | --config-yaml content] [-test] [--] <package>...
+//	vow [flags] [--] [packages...]
+//
+// vow -h lists the flags, and docs/cli.md describes each in full.
 //
 // Without driver flags, vow lints every non-test Go file in the named
 // packages; -test extends the load to include _test.go files. With
@@ -22,6 +23,9 @@
 // mutually exclusive — adopters who want repo-tracked policy choose
 // --config-file, and adopters who want an ad-hoc override (e.g. a CI step
 // that opts a project out for one job) choose --config-yaml.
+//
+// -json prints the diagnostics and any analyzer failure on stdout as JSON
+// instead of as text on stderr.
 //
 // Caller-resolver knobs (`caller_resolver.*` in the config) are
 // consulted only through `--config-file` / `--config-yaml`;
@@ -59,6 +63,8 @@ type driverFlags struct {
 	ConfigYAML   string
 	IncludeTests bool
 	VetMode      bool
+	JSON         bool
+	Help         bool
 }
 
 // Exit codes other than 0. docs/cli.md documents them; change both
@@ -83,6 +89,10 @@ func main() {
 		// stderr rather than passing it as an io.Writer.
 		os.Stderr.WriteString("vow: " + err.Error() + "\n")
 		os.Exit(exitNotStarted)
+	}
+	if flags.Help {
+		os.Stdout.WriteString(usageText())
+		os.Exit(0)
 	}
 	if len(flags.Changed.Files) > 0 {
 		validateStart := time.Now()
@@ -136,6 +146,9 @@ func main() {
 			os.Stderr.WriteString(fmt.Sprintf(
 				"vow: --changed-files (%d file(s)) resolved to no lintable package; nothing to lint\n",
 				len(flags.Changed.Files)))
+			if flags.JSON {
+				os.Stdout.Write(jsonReport(nil))
+			}
 			os.Exit(0)
 		}
 		remaining = narrow
@@ -154,7 +167,7 @@ func main() {
 			os.Stderr.WriteString("vow: --vet-mode requires --config-file or --config-yaml; the per-directory vow.yaml walk cannot run under it\n")
 			os.Exit(exitNotStarted)
 		}
-		os.Exit(runVetPipeline(vetConfigYAML(flags), flags.Changed, flags.IncludeTests, remaining))
+		os.Exit(runVetPipeline(vetConfigYAML(flags), flags.Changed, flags.IncludeTests, remaining, flags.JSON))
 	}
 	timing.LogEntry("PHASE=driver.Run.entry remaining=%v", remaining)
 
@@ -191,6 +204,11 @@ func main() {
 	if err != nil {
 		os.Stderr.WriteString("vow: analyze: " + err.Error() + "\n")
 		os.Exit(exitFailure)
+	}
+
+	if flags.JSON {
+		os.Stdout.Write(jsonReport(driverReport(result)))
+		os.Exit(resolveExitCode(result, loadErrCount))
 	}
 
 	// Buffer diagnostics so stderr keeps its Closable obligation
@@ -437,16 +455,17 @@ func loadConfigOverride(flags driverFlags) (*config.Config, error) {
 	return nil, nil
 }
 
-// parseDriverArgs separates vow driver flags from args. It returns the
-// extracted driverFlags (--changed-files / --with-callers /
-// --config-file / --config-yaml / --vet-mode / -test) and the remaining
-// package patterns. --changed-files collects variadic paths up to the
-// next dash-prefixed token (including "--") or the end of args.
-// --config-file and --config-yaml are mutually exclusive; specifying
-// both is an error. -test (or --test) opts test files into the
-// analysis; without it, the loader excludes them. Any other
+// parseDriverArgs separates vow's flags from args. It returns the
+// extracted driverFlags and the remaining package patterns. It accepts
+// the names flagSpecs lists, except the vettool flags; any other
 // dash-prefixed token is an unknown-flag error, and every token after
 // "--" is a package pattern, even one that starts with a dash.
+// --changed-files collects variadic paths up to the next dash-prefixed
+// token (including "--") or the end of args. --config-file and
+// --config-yaml are mutually exclusive; specifying both is an error. -h
+// returns at once with only Help set, so the arguments after it are not
+// read and the checks that combine flags, such as --with-callers
+// requiring --changed-files, do not run.
 //
 // vow:nil (?) ,?,
 func parseDriverArgs(args []string) (driverFlags, []string, error) {
@@ -454,7 +473,19 @@ func parseDriverArgs(args []string) (driverFlags, []string, error) {
 	remaining := []string{}
 	sawChangedFiles := false
 	for i := 0; i < len(args); i++ {
-		switch args[i] {
+		if args[i] == "--" {
+			remaining = append(remaining, args[i+1:]...)
+			break
+		}
+		if !strings.HasPrefix(args[i], "-") {
+			remaining = append(remaining, args[i])
+			continue
+		}
+		spec, known := driverFlagNamed(args[i])
+		if !known {
+			return driverFlags{}, nil, fmt.Errorf("unknown flag %s", args[i])
+		}
+		switch spec.names[0] {
 		case "--changed-files":
 			sawChangedFiles = true
 			// Consume the variadic path list; the outer loop resumes at the next flag.
@@ -476,18 +507,14 @@ func parseDriverArgs(args []string) (driverFlags, []string, error) {
 			}
 			i++
 			flags.ConfigYAML = args[i]
-		case "-test", "--test":
+		case "-test":
 			flags.IncludeTests = true
+		case "-json":
+			flags.JSON = true
+		case "-h":
+			return driverFlags{Help: true}, nil, nil
 		case "--vet-mode":
 			flags.VetMode = true
-		case "--":
-			remaining = append(remaining, args[i+1:]...)
-			i = len(args)
-		default:
-			if strings.HasPrefix(args[i], "-") {
-				return driverFlags{}, nil, fmt.Errorf("unknown flag %s", args[i])
-			}
-			remaining = append(remaining, args[i])
 		}
 	}
 	if flags.Changed.WithCallers && !sawChangedFiles {

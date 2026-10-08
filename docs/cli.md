@@ -1,13 +1,16 @@
 # CLI
 
-The `vow` binary is a `go/analysis` single-checker. Its command-line
-surface is therefore the same as any other Go static analyzer
-delivered via `singlechecker.Main`.
+Run from the command line, `vow` takes only the flags on this page,
+and any other flag stops the run with exit code 2. It drives the
+analyzer itself rather than through `singlechecker.Main`, so
+`singlechecker` flags such as `-c` and `-fix` are not among them. When
+`go vet` runs `vow` as a vettool, `vow` takes the flags `-flags`
+reports instead.
 
 ## Usage
 
 ```sh
-vow [flags] [packages...]
+vow [flags] [--] [packages...]
 ```
 
 Package patterns follow the standard Go tooling conventions —
@@ -26,25 +29,18 @@ vow main.go util.go       # specific files in the current package
 
 ## Common flags
 
-The `singlechecker` framework exposes a fixed set of flags. The
-most useful ones:
+These flags share their names with other `go/analysis` tools.
 
 | Flag | Purpose |
 |------|---------|
-| `-V` | Print the analyzer version and exit. |
-| `-flags` | List the analyzer's tunable flags as JSON (for tool integration). |
-| `-fix` | Apply the analyzer's suggested fixes. `vow` does not currently emit fixes, so this is a no-op. |
-| `-json` | Emit diagnostics as a JSON document keyed by package. |
-| `-c <n>` | Print `n` lines of context around each diagnostic in the default output mode. |
-| `-test` | Include test files in the analysis. Test files are excluded by default. |
-
-The analyzer itself takes no `-vow.*` flags.
+| `-json` | Print the report, analyzer failures included, on stdout as one JSON document instead of as text on stderr. See [Output format](#output-format). `--json` does the same. |
+| `-test` | Include test files in the analysis. Test files are excluded by default; the flag takes no value. `--test` does the same. |
+| `-h` | Print each flag on this page with a one-line summary on stdout, and exit 0. `-help` and `--help` do the same. |
 
 ## Driver flags
 
-`vow` reads its own flags ahead of the `singlechecker` set. They
-control which packages are loaded and where the configuration comes
-from.
+These flags control which packages are loaded, how they are
+analyzed, and where the configuration comes from.
 
 | Flag | Purpose |
 |------|---------|
@@ -52,7 +48,7 @@ from.
 | `--with-callers` | Extend the run with the caller-side checks. Requires `--changed-files`, and replaces any package arguments with the changed packages plus their direct callers. Using it alone exits with code 2. |
 | `--config-file <path>` | Read configuration from one `vow.yaml` file for the whole run, instead of discovering one per directory. |
 | `--config-yaml <content>` | Read the same configuration from an inline string. Passing both config flags is an error. |
-| `--vet-mode` | Run the analysis through `go vet` instead of loading the packages in one process, so each package's facts come from the Go build cache. See [Vet mode](#vet-mode). |
+| `--vet-mode` | Run the analysis through `go vet` instead of loading the packages in one process, so each package's facts come from the Go build cache. Requires `--config-file` or `--config-yaml`. See [Vet mode](#vet-mode). |
 
 ### Vet mode
 
@@ -61,8 +57,9 @@ analyzes one package at a time, stores each package's facts in the build
 cache, and reuses them while the package's sources and dependencies are
 unchanged — where the default driver loads the dependency closure and
 analyzes it again on every run. Both paths run the same analyzer over
-the same packages and print in the same `position: message` shape on
-stderr; what changes is how much is loaded to produce the report.
+the same packages and report the same diagnostics, as `position:
+message` lines on stderr or, under `-json`, as a JSON document on
+stdout; what changes is how much is loaded to produce the report.
 
 Two consequences are worth knowing before turning it on:
 
@@ -88,6 +85,16 @@ Two consequences are worth knowing before turning it on:
   carries the inputs the narrowing needs — whether it sits inside a call
   and where that call's callee is declared — and vow applies the same
   rule the default path applies inside the analyzer.
+
+## Vettool flags
+
+`go vet` passes these when it runs `vow` as its vettool. They also work
+on their own.
+
+| Flag | Purpose |
+|------|---------|
+| `-V=full` | Print a build ID (a hash of the `vow` binary) and exit. `go vet` asks for it in this form to tell when the tool has changed; a bare `-V` is rejected. For the vow release, run `go version -m $(which vow)`. |
+| `-flags` | Print as JSON the flags `vow` accepts as a `go vet` vettool, which differ from the flags on this page. |
 
 ## Configuration
 
@@ -154,11 +161,45 @@ Example:
 store.go:14:9: vow[sentinel-error]: sentinel error ErrNotFound leaked: needs observation or explicit propagation
 ```
 
-JSON mode (`-json`) emits a map keyed by package import path; each
-package's value is a list of diagnostics with `posn`, `message`,
-`category`, and (when applicable) `suggested_fixes` fields. The
-shape is the framework's standard format and is compatible with
-tools that already consume `go vet`-style JSON.
+With `-json`, `vow` prints one JSON document on stdout in the shape
+`go vet -json` uses: an object keyed by package ID and then by
+analyzer name, whose value is either the list of diagnostics or an
+object with an `error` field when the analyzer failed on that
+package. A package with nothing to report is left out, so a clean run
+prints `{}`.
+
+The exit code is the one the run would have without `-json`. Read it
+before the document: under `--vet-mode`, a failure the go command
+reports itself, such as a package that does not type-check, goes to
+stderr rather than into the document, which can then be `{}`. When
+`vow` stops on an error before analyzing anything (a bad flag, for
+instance), or cannot run the analysis or, under `--vet-mode`, read the
+report `go vet` returns, it prints no document and says why on stderr.
+A run whose `--changed-files` resolve to no lintable package is not
+such an error: it prints `{}` and exits 0.
+
+```json
+{
+	"example.com/store": {
+		"vow": [
+			{
+				"category": "must-consume:ErrNotFound",
+				"posn": "/repo/store/store.go:14:9",
+				"end": "/repo/store/store.go:14:9",
+				"message": "vow[sentinel-error]: sentinel error ErrNotFound leaked: needs observation or explicit propagation"
+			}
+		]
+	}
+}
+```
+
+The keys are package IDs as each path's loader names them. Under
+`-test`, the default path analyzes a package that has test files both
+on its own and compiled together with them, keying the second
+`example.com/store [example.com/store.test]`, so a diagnostic in a
+non-test file is listed under both keys. `--vet-mode` analyzes only the
+package compiled with its test files, keyed `example.com/store`, and
+lists each diagnostic once.
 
 ## Exit codes
 
@@ -202,7 +243,9 @@ exits `2` in both modes.
 - **Custom presets.** The default `vow` binary embeds the
   `sentinel-error` preset. To enforce custom obligations, build a
   binary that constructs `analysis.New(presets)` over your own
-  preset list and wraps it with `singlechecker.Main`.
+  preset list and wraps it with `singlechecker.Main`. That binary
+  takes the `singlechecker` flags, so the driver flags on this page,
+  such as `--changed-files` and `--config-file`, are not available.
 
 ## See also
 

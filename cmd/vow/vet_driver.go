@@ -5,23 +5,32 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"maps"
 	"os"
 	"os/exec"
 	"slices"
-	"sort"
 	"strings"
 
 	"github.com/knowledge-work/go-vow/internal/cli"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // vetDiagnostic mirrors one entry in `go vet -json`'s per-analyzer
-// list. Only the fields vow prints are decoded.
+// list, which is also the shape -json prints. It has no suggested-fixes
+// field, so a fix on a diagnostic does not reach the -json output.
 type vetDiagnostic struct {
+	Category string       `json:"category,omitempty"`
+	Posn     string       `json:"posn"`
+	End      string       `json:"end"`
+	Message  string       `json:"message"`
+	Related  []vetRelated `json:"related,omitempty"`
+}
+
+// vetRelated mirrors one related-information entry of a vetDiagnostic.
+type vetRelated struct {
 	Posn    string `json:"posn"`
+	End     string `json:"end"`
 	Message string `json:"message"`
-	Related []struct {
-		Message string `json:"message"`
-	} `json:"related"`
 }
 
 // vetResult is one analyzer's outcome for one package. `go vet -json`
@@ -31,6 +40,18 @@ type vetDiagnostic struct {
 type vetResult struct {
 	Diagnostics []vetDiagnostic
 	Err         string
+}
+
+// MarshalJSON writes the shape UnmarshalJSON reads.
+//
+// vow:nil () ?,
+func (r vetResult) MarshalJSON() ([]byte, error) {
+	if r.Err != "" {
+		return json.Marshal(struct {
+			Error string `json:"error"`
+		}{r.Err})
+	}
+	return json.Marshal(r.Diagnostics)
 }
 
 // UnmarshalJSON accepts both shapes a result takes.
@@ -76,8 +97,11 @@ func vetPackagePath(id string) string {
 // packages it targets — the distinction the in-process driver draws
 // with a per-job flag. An empty scope keeps every package.
 //
-// vow:nil (,,,?)
-func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests bool, patterns []string) int {
+// With asJSON, it prints the report on stdout in the `go vet -json` shape
+// instead of as text on stderr.
+//
+// vow:nil (,,,?,)
+func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests bool, patterns []string, asJSON bool) int {
 	self, err := os.Executable()
 	if err != nil {
 		os.Stderr.WriteString("vow: locate own binary: " + err.Error() + "\n")
@@ -110,7 +134,13 @@ func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests b
 		os.Stderr.WriteString("vow: read go vet report: " + parseErr.Error() + "\n")
 		return exitFailure
 	}
-	printed, failed := printVetDiagnostics(report, narrow, includeTests)
+	selected := selectVetReport(report, narrow, includeTests)
+	if asJSON {
+		os.Stdout.Write(jsonReport(selected))
+	} else {
+		printVetDiagnostics(selected)
+	}
+	printed, failed := countVetResults(selected)
 	if failed > 0 {
 		// An analyzer that did not run leaves that package unchecked, so
 		// the run cannot claim a verdict for it.
@@ -161,54 +191,109 @@ func parseVetReport(raw []byte) (map[string]map[string]vetResult, error) {
 	}
 }
 
-// printVetDiagnostics writes the diagnostics of the in-scope packages
-// to stderr in the driver's `position: message` shape and returns how
-// many it wrote and how many analyzers failed. Packages are visited in
-// sorted order so a run's output does not depend on map iteration.
+// selectVetReport returns the part of report that vow prints: the
+// in-scope packages, each with the diagnostics keptVetDiagnostics keeps,
+// stripped of the narrow-scope annotation. A result left with no
+// diagnostics is dropped, since it would encode as `null`; an analyzer
+// failure is kept.
 //
 // includeTests keeps the diagnostics of _test.go files. The go command
 // always analyzes test files, where a vow run reaches them only under
 // -test, so dropping them here is what keeps the two paths reporting
 // the same set.
 //
-// vow:nil (?,,) ,
-func printVetDiagnostics(report map[string]map[string]vetResult, narrow cli.ChangedFileSet, includeTests bool) (printed, failed int) {
-	paths := make([]string, 0, len(report))
-	for path := range report {
-		paths = append(paths, path)
-	}
-	sort.Strings(paths)
+// vow:nil (?,,) !
+func selectVetReport(report map[string]map[string]vetResult, narrow cli.ChangedFileSet, includeTests bool) map[string]map[string]vetResult {
+	selected := map[string]map[string]vetResult{}
 	scope := narrowPackages(narrow)
-	for _, path := range paths {
+	for path, byAnalyzer := range report {
 		if len(scope) > 0 && !scope[vetPackagePath(path)] {
 			continue
 		}
-		byAnalyzer := report[path]
-		names := make([]string, 0, len(byAnalyzer))
-		for name := range byAnalyzer {
-			names = append(names, name)
+		for name, result := range byAnalyzer {
+			if result.Err == "" {
+				result.Diagnostics = keptVetDiagnostics(result.Diagnostics, vetPackagePath(path), narrow, includeTests)
+				if len(result.Diagnostics) == 0 {
+					continue
+				}
+			}
+			if selected[path] == nil {
+				selected[path] = map[string]vetResult{}
+			}
+			selected[path][name] = result
 		}
-		sort.Strings(names)
-		for _, name := range names {
+	}
+	return selected
+}
+
+// keptVetDiagnostics drops the diagnostics in _test.go files unless
+// includeTests is set, and the ones outside the narrow scope. It strips
+// the narrow-scope annotation from the rest, since the annotation exists
+// only to feed that narrowing, and leaves diags unchanged.
+//
+// vow:nil (?,,,) ?
+func keptVetDiagnostics(diags []vetDiagnostic, pkgPath string, narrow cli.ChangedFileSet, includeTests bool) []vetDiagnostic {
+	return seq.ChainOf(diags...).
+		Filter(func(diag vetDiagnostic) bool {
+			return includeTests || !isTestFileDiagnostic(diag.Posn)
+		}).
+		Filter(func(diag vetDiagnostic) bool {
+			return !dropByNarrowScope(diag, pkgPath, narrow)
+		}).
+		Map(func(diag vetDiagnostic) vetDiagnostic {
+			diag.Related = seq.ChainOf(diag.Related...).
+				Filter(func(related vetRelated) bool { return !isNarrowAnnotation(related) }).
+				ToSlice()
+			return diag
+		}).
+		ToSlice()
+}
+
+// countVetResults returns how many diagnostics a report holds and how
+// many analyzers failed in it.
+//
+// vow:nil (?) ,
+func countVetResults(report map[string]map[string]vetResult) (diagnostics, failures int) {
+	for _, byAnalyzer := range report {
+		for _, result := range byAnalyzer {
+			if result.Err != "" {
+				failures++
+			}
+			diagnostics += len(result.Diagnostics)
+		}
+	}
+	return diagnostics, failures
+}
+
+// printVetDiagnostics writes a selected report to stderr in the
+// driver's `position: message` shape.
+//
+// vow:nil (?)
+func printVetDiagnostics(report map[string]map[string]vetResult) {
+	os.Stderr.WriteString(vetReportText(report))
+}
+
+// vetReportText renders a selected report as printVetDiagnostics writes
+// it. Packages and analyzers are visited in sorted order so a run's
+// output does not depend on map iteration.
+//
+// vow:nil (?)
+func vetReportText(report map[string]map[string]vetResult) string {
+	var text strings.Builder
+	for _, path := range slices.Sorted(maps.Keys(report)) {
+		byAnalyzer := report[path]
+		for _, name := range slices.Sorted(maps.Keys(byAnalyzer)) {
 			result := byAnalyzer[name]
 			if result.Err != "" {
-				os.Stderr.WriteString("vow: " + name + " failed on " + path + ": " + result.Err + "\n")
-				failed++
+				text.WriteString("vow: " + name + " failed on " + path + ": " + result.Err + "\n")
 				continue
 			}
 			for _, diag := range result.Diagnostics {
-				if !includeTests && isTestFileDiagnostic(diag.Posn) {
-					continue
-				}
-				if dropByNarrowScope(diag, vetPackagePath(path), narrow) {
-					continue
-				}
-				os.Stderr.WriteString(diag.Posn + ": " + diag.Message + "\n")
-				printed++
+				text.WriteString(diag.Posn + ": " + diag.Message + "\n")
 			}
 		}
 	}
-	return printed, failed
+	return text.String()
 }
 
 // isTestFileDiagnostic reports whether a diagnostic position names a Go
@@ -295,18 +380,25 @@ func dropByNarrowScope(diag vetDiagnostic, pkgPath string, narrow cli.ChangedFil
 	return false
 }
 
+// narrowAnnotationPrefix starts the related-information message that
+// carries a diagnostic's narrow-scope annotation.
+const narrowAnnotationPrefix = "vow:narrow "
+
 // narrowAnnotationOf returns the narrow-scope annotation the analyzer
 // attached to diag, without its prefix.
 //
 // vow:nil () ,
 func narrowAnnotationOf(diag vetDiagnostic) (string, bool) {
-	const prefix = "vow:narrow "
-	for _, related := range diag.Related {
-		if strings.HasPrefix(related.Message, prefix) {
-			return strings.TrimPrefix(related.Message, prefix), true
-		}
-	}
-	return "", false
+	related, found := seq.ChainOf(diag.Related...).Find(isNarrowAnnotation)
+	return strings.TrimPrefix(related.Message, narrowAnnotationPrefix), found
+}
+
+// isNarrowAnnotation reports whether related carries the narrow-scope
+// annotation.
+//
+// vow:nil ()
+func isNarrowAnnotation(related vetRelated) bool {
+	return strings.HasPrefix(related.Message, narrowAnnotationPrefix)
 }
 
 // positionFile returns the file part of a `file:line:col` position.
