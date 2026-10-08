@@ -1,0 +1,3 @@
+nil_decl:
+  require_declaration: true
+closables: {}

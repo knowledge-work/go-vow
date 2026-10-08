@@ -11,7 +11,9 @@ package config
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 
 	"gopkg.in/yaml.v3"
@@ -110,12 +112,24 @@ func DefaultExcludePackageSuffixes() []string {
 
 // Parse decodes a vow.yaml payload into a Config. An empty payload
 // returns the zero-value Config, which carries the embedded defaults
-// for every section. Unknown top-level keys are rejected so a typo
-// (`closables:` instead of `closable:`) surfaces as an error rather
-// than as a silent no-op.
+// for every section. Unknown keys are rejected at every level so a typo
+// (`closables:` instead of `closable:`, or `require_declaration:`
+// under `nil_decl:`) surfaces as an error rather than as a silent no-op.
 //
 // vow:nil (?) ?,
 func Parse(raw []byte) (*Config, error) {
+	cfg, err := decode(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse vow.yaml: %w", err)
+	}
+	return cfg, nil
+}
+
+// decode is Parse without the error prefix, so a caller that knows the
+// file's path can name the file instead.
+//
+// vow:nil (?) ?,
+func decode(raw []byte) (*Config, error) {
 	cfg := &Config{}
 	if len(raw) == 0 {
 		return cfg, nil
@@ -123,7 +137,12 @@ func Parse(raw []byte) (*Config, error) {
 	dec := yaml.NewDecoder(bytes.NewReader(raw))
 	dec.KnownFields(true)
 	if err := dec.Decode(cfg); err != nil {
-		return nil, fmt.Errorf("parse vow.yaml: %w", err)
+		// A file of comments alone holds no document, which the decoder
+		// reports as EOF; it configures nothing, as an empty file does.
+		if errors.Is(err, io.EOF) {
+			return cfg, nil
+		}
+		return nil, err
 	}
 	return cfg, nil
 }
@@ -139,5 +158,9 @@ func ReadFile(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read vow.yaml at %s: %w", path, err)
 	}
-	return Parse(raw)
+	cfg, err := decode(raw)
+	if err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
+	}
+	return cfg, nil
 }

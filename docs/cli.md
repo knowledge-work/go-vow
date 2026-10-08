@@ -95,7 +95,11 @@ Behaviour that is neither a preset nor an annotation is set in a
 `vow.yaml` file. Without a config flag, each package uses the
 nearest such file in an ancestor directory, which lets a repository
 turn a rule on one subtree at a time. A section a file omits keeps
-the built-in default for that section.
+the built-in default for that section. A file vow cannot read or
+parse, for example one with a misspelled key at any level, is reported
+as a `vow[config]` diagnostic at each package it governs. Those
+packages then run with the built-in defaults for every section, not
+with a `vow.yaml` further up.
 
 | Key | Purpose |
 |-----|---------|
