@@ -1,8 +1,14 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
+
+	"golang.org/x/tools/go/analysis/unitchecker"
 
 	"github.com/knowledge-work/go-vow/internal/assert"
 	"github.com/knowledge-work/go-vow/internal/cli"
@@ -14,28 +20,89 @@ func TestRunsAsVettool(t *testing.T) {
 	type vettoolCase struct {
 		args   []string
 		marked bool
+		fromGo bool
 		want   bool
 	}
+	// A row whose flag marks a person still sets fromGo, so that the flag
+	// rather than the missing variable is what decides it.
 	tabletest.Run(t, map[string]vettoolCase{
-		"flag list request":                     {args: []string{"-flags"}, want: true},
-		"build identity request":                {args: []string{"-V=full"}, want: true},
-		"unit config alone":                     {args: []string{"/tmp/b001/vet.cfg"}, want: true},
-		"unit config beside a forwarded flag":   {args: []string{"-json", "/tmp/b001/vet.cfg"}, want: true},
-		"unit config under the wrapper marker":  {args: []string{"-json", "/tmp/b001/vet.cfg"}, marked: true, want: true},
-		"driver config path ending in cfg":      {args: []string{"--config-file", "policy.cfg", "./..."}, want: false},
-		"driver run":                            {args: []string{"--changed-files", "a.go", "--with-callers", "./..."}, want: false},
-		"driver run with no arguments":          {args: nil, want: false},
-		"help beside the flag list request":     {args: []string{"-h", "-flags"}, want: false},
-		"help beside a unit config":             {args: []string{"-help", "/tmp/b001/vet.cfg"}, want: false},
-		"help under the wrapper marker":         {args: []string{"--help", "/tmp/b001/vet.cfg"}, marked: true, want: true},
-		"help after the flag list request":      {args: []string{"-flags", "-h"}, want: true},
-		"help after the separator":              {args: []string{"-V=full", "--", "-h"}, want: true},
-		"help as a pattern after the separator": {args: []string{"--", "-h", "-flags"}, want: true},
-		"help after a forwarded flag":           {args: []string{"-json", "-h", "/tmp/b001/vet.cfg"}, want: false},
+		"flag list request":                       {args: []string{"-flags"}, want: true},
+		"build identity request":                  {args: []string{"-V=full"}, want: true},
+		"unit config from the go command":         {args: []string{"/tmp/b001/vet.cfg"}, fromGo: true, want: true},
+		"unit config from a person":               {args: []string{"/tmp/b001/vet.cfg"}, want: false},
+		"unit config beside a forwarded flag":     {args: []string{"-json", "/tmp/b001/vet.cfg"}, fromGo: true, want: true},
+		"unit config beside a flag from a person": {args: []string{"-json", "/tmp/b001/vet.cfg"}, want: false},
+		"unit config under the wrapper marker":    {args: []string{"-json", "/tmp/b001/vet.cfg"}, marked: true, want: true},
+		"driver config path ending in cfg":        {args: []string{"--config-file", "policy.cfg", "./..."}, fromGo: true, want: false},
+		"driver run":                              {args: []string{"--changed-files", "a.go", "--with-callers", "./..."}, want: false},
+		"driver run with no arguments":            {args: nil, want: false},
+		"help beside the flag list request":       {args: []string{"-h", "-flags"}, want: false},
+		"help beside a unit config":               {args: []string{"-help", "/tmp/b001/vet.cfg"}, fromGo: true, want: false},
+		"help under the wrapper marker":           {args: []string{"--help", "/tmp/b001/vet.cfg"}, marked: true, want: true},
+		"help after the flag list request":        {args: []string{"-flags", "-h"}, want: true},
+		"help after the separator":                {args: []string{"-V=full", "--", "-h"}, want: true},
+		"help as a pattern after the separator":   {args: []string{"--", "-h", "-flags"}, want: true},
+		"help after a forwarded flag":             {args: []string{"-json", "-h", "/tmp/b001/vet.cfg"}, fromGo: true, want: false},
 	}, func(t *testing.T, c vettoolCase) {
-		assert.Equal(t, fmt.Sprintf("runsAsVettool(%q, marked=%v)", c.args, c.marked),
-			runsAsVettool(c.args, c.marked), c.want)
+		assert.Equal(t, fmt.Sprintf("runsAsVettool(%q, marked=%v, fromGo=%v)", c.args, c.marked, c.fromGo),
+			runsAsVettool(c.args, c.marked, c.fromGo), c.want)
 	})
+}
+
+// TestUnitConfigWritesOnlyUnderTheGoCommand hands the built binary a unit
+// config whose output paths name files that already hold content, the
+// way a person would pass on a .cfg file someone else wrote.
+func TestUnitConfigWritesOnlyUnderTheGoCommand(t *testing.T) {
+	binary := buildVowBinary(t)
+	type unitCase struct {
+		goVar      string // the go command's variable, empty for a person
+		wantStdout string
+		wantVetx   bool
+	}
+	tabletest.Run(t, map[string]unitCase{
+		"from a person": {wantStdout: "kept\n"},
+		// The positive control: a config unitchecker rejects would leave the
+		// files alone too, so the case above means something only once the
+		// same config is shown to write.
+		"under the go command's variable": {goVar: "p", wantStdout: "", wantVetx: true},
+	}, func(t *testing.T, c unitCase) {
+		dir := t.TempDir()
+		source := filepath.Join(dir, "p.go")
+		assert.MustNoError(t, "write p.go", os.WriteFile(source, []byte("package p\n"), 0o600))
+		stdout := filepath.Join(dir, "stdout")
+		assert.MustNoError(t, "write stdout", os.WriteFile(stdout, []byte("kept\n"), 0o600))
+		vetx := filepath.Join(dir, "vetx")
+		unit, err := json.Marshal(unitchecker.Config{
+			ID: "p", Compiler: "gc", ImportPath: "p", GoFiles: []string{source}, Stdout: stdout, VetxOutput: vetx,
+		})
+		assert.MustNoError(t, "marshal the unit config", err)
+		unitFile := filepath.Join(dir, "unit.cfg")
+		assert.MustNoError(t, "write unit.cfg", os.WriteFile(unitFile, unit, 0o600))
+		t.Setenv(vetToolEnv, "")
+		t.Setenv(goToolEnv, c.goVar)
+
+		runVowBinary(t, binary, dir, unitFile)
+
+		got, err := os.ReadFile(stdout)
+		assert.MustNoError(t, "read stdout", err)
+		assert.Equal(t, "content of the Stdout file", string(got), c.wantStdout)
+		_, err = os.Stat(vetx)
+		assert.Equal(t, "VetxOutput file exists", err == nil, c.wantVetx)
+	})
+}
+
+// TestDirectGoVetRunsTheAnalyzer runs `go vet -vettool` by hand, which
+// sets no wrapper marker, so only the go command's own variable lets the
+// unit config through.
+func TestDirectGoVetRunsTheAnalyzer(t *testing.T) {
+	binary := buildVowBinary(t)
+	dir, err := filepath.Abs(filepath.Join("testdata", "exitcode"))
+	assert.MustNoError(t, "resolve fixture", err)
+	vet := exec.Command("go", "vet", "-vettool="+binary, "-vow.config=nil_decl:\n  require_declarations: false\n", "./leak")
+	vet.Dir = dir
+	vet.Env = append(os.Environ(), "GOFLAGS=", vetToolEnv+"=")
+	out, _ := vet.CombinedOutput()
+	assert.Contains(t, "go vet output", string(out), "sentinel error ErrLeak leaked")
 }
 
 func TestVetConfigValueSet(t *testing.T) {
