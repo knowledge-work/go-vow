@@ -76,7 +76,7 @@ const (
 )
 
 func main() {
-	if runsAsVettool(os.Args[1:], os.Getenv(vetToolEnv) != "") {
+	if runsAsVettool(os.Args[1:], os.Getenv(vetToolEnv) != "", os.Getenv(goToolEnv) != "") {
 		runVettool()
 		return
 	}

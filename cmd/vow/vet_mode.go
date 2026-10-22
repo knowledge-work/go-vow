@@ -22,6 +22,10 @@ const vetConfigFlag = "config"
 // vet` process reaches this binary when it is re-entered as the tool.
 const vetToolEnv = "VOW_VETTOOL"
 
+// goToolEnv is set by the go command on every tool it runs for a
+// package, a vettool included, with or without -toolexec.
+const goToolEnv = "TOOLEXEC_IMPORTPATH"
+
 // vetAnnotateFlag is the flag that asks the analyzer to attach the
 // narrow-scope inputs to each diagnostic. The value is the same for
 // every run, so it does not divide the go command's cache the way the
@@ -32,20 +36,25 @@ const vetAnnotateFlag = "narrow-annotate"
 // vettool rather than a person invoking the driver. The whole protocol
 // is three shapes: a request for the flag list, a request for the build
 // identity, and a unit config file to analyze. marked says the
-// invocation carries the wrapper's environment marker.
+// invocation carries the wrapper's environment marker, and fromGo says
+// it carries the variable the go command sets on the tools it runs.
 //
 // The unit config is recognised by its suffix, which a driver run can
 // also carry — `--config-file policy.cfg` names such a path. The suffix
 // therefore only decides when the marker is present, or when the
-// invocation carries no driver flag at all, which is what keeps a
-// direct `go vet -vettool=vow` working.
+// invocation carries no driver flag at all.
+//
+// The suffix also needs marked or fromGo. A unit config names the files
+// the analysis creates or overwrites, so one a person passes in could
+// come from whoever wrote the file. fromGo is what keeps a direct
+// `go vet -vettool=vow` working, which sets no marker.
 //
 // A help flag without the marker means a person, since go vet never asks
 // for help. It wins only where parseDriverArgs reads it as a flag: before
 // "--" and before any vettool flag, which the parser would reject first.
 //
-// vow:nil (?,)
-func runsAsVettool(args []string, marked bool) bool {
+// vow:nil (?,,)
+func runsAsVettool(args []string, marked, fromGo bool) bool {
 	flagsEnd := slices.IndexFunc(args, func(arg string) bool { return arg == "--" || isVettoolFlag(arg) })
 	if flagsEnd < 0 {
 		flagsEnd = len(args)
@@ -57,6 +66,9 @@ func runsAsVettool(args []string, marked bool) bool {
 		return true
 	}
 	if !marked && hasDriverFlag(args) {
+		return false
+	}
+	if !marked && !fromGo {
 		return false
 	}
 	return slices.ContainsFunc(args, func(arg string) bool {
