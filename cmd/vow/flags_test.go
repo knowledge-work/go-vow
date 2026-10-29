@@ -79,7 +79,7 @@ func otherNamesIn(line string) []string {
 func TestEveryFlagSpecIsAccepted(t *testing.T) {
 	tabletest.Run(t, namedFlagSpecs(), func(t *testing.T, c namedFlagSpec) {
 		if c.spec.vettool {
-			assert.Equal(t, "runsAsVettool", runsAsVettool([]string{c.name}, false), true)
+			assert.Equal(t, "runsAsVettool", runsAsVettool([]string{c.name}, false, false), true)
 			return
 		}
 		args := []string{c.name}
