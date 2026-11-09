@@ -21,9 +21,8 @@ func TestAnalyzer(t *testing.T) {
 // — wrapped return — through a separate analyzer instance that
 // loads the sample passthrough-emit preset from example/. The
 // shipped binary carries the sentinel-error and closable presets
-// only; adopters who use a wrap library register a sample preset
-// alongside the built-in set the same way the test entry point
-// does here.
+// only; adopters load the sample through vow.yaml, which the
+// presetWrappedReturn fixture of TestAnalyzerLoadedPresets drives.
 func TestAnalyzerWrappedReturn(t *testing.T) {
 	presets := builtinPresets()
 	samplePath := filepath.Join("..", "..", "example", "werror.yaml")
@@ -33,6 +32,15 @@ func TestAnalyzerWrappedReturn(t *testing.T) {
 	assert.MustNoError(t, "parse sample preset "+samplePath, err)
 	analyzer := New(append(presets, sample), nil)
 	analysistest.Run(t, analysistest.TestData(), analyzer, "wrappedReturn")
+}
+
+// TestAnalyzerLoadedPresets runs the default analyzer over packages
+// whose vow.yaml names preset files: a new concept, a preset replacing
+// the built-in sentinel-error by name, one added beside it under a name
+// of its own, the shipped example/werror.yaml, and a file that does not
+// exist.
+func TestAnalyzerLoadedPresets(t *testing.T) {
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "presetConcept", "presetReplacesBuiltin", "presetAddsBesideBuiltin", "presetWrappedReturn", "presetMissing")
 }
 
 // TestAnalyzerClosableConfigOptOut drives the per-directory

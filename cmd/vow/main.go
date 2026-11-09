@@ -167,7 +167,7 @@ func main() {
 			os.Stderr.WriteString("vow: --vet-mode requires --config-file or --config-yaml; the per-directory vow.yaml walk cannot run under it\n")
 			os.Exit(exitNotStarted)
 		}
-		os.Exit(runVetPipeline(vetConfigYAML(flags), flags.Changed, flags.IncludeTests, remaining, flags.JSON))
+		os.Exit(runVetPipeline(vetConfigYAML(flags), vetPresetsJSON(override), flags.Changed, flags.IncludeTests, remaining, flags.JSON))
 	}
 	timing.LogEntry("PHASE=driver.Run.entry remaining=%v", remaining)
 
@@ -434,7 +434,10 @@ func callerResolverExcludeSuffixes(override *config.Config) []string {
 }
 
 // loadConfigOverride resolves the optional --config-file / --config-yaml
-// flag into a parsed Config. It returns nil when neither flag is set.
+// flag into a parsed Config, with the preset files it names loaded: a
+// relative path resolves against the config file's directory, or
+// against the working directory for inline content. It returns nil
+// when neither flag is set.
 //
 // vow:nil () ?,
 func loadConfigOverride(flags driverFlags) (*config.Config, error) {
@@ -448,6 +451,9 @@ func loadConfigOverride(flags driverFlags) (*config.Config, error) {
 	case flags.ConfigYAML != "":
 		cfg, err := config.Parse([]byte(flags.ConfigYAML))
 		if err != nil {
+			return nil, fmt.Errorf("--config-yaml: %w", err)
+		}
+		if err := cfg.LoadPresets(""); err != nil {
 			return nil, fmt.Errorf("--config-yaml: %w", err)
 		}
 		return cfg, nil

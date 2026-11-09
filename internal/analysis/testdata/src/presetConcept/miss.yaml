@@ -1,0 +1,8 @@
+name: miss
+subjects:
+  - match: "annotation:vow:define @Miss"
+obligations:
+  - type: must-consume
+    detail:
+      consumers:
+        - misslib.IsMiss

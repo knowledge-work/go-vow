@@ -15,8 +15,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/knowledge-work/go-vow/internal/dsl"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // Config models a single vow.yaml file. Fields default to the
@@ -40,6 +44,26 @@ type Config struct {
 	// CallerResolver: the load happens once per driver invocation,
 	// before any per-directory discovery could run.
 	AnalysisScope AnalysisScope `yaml:"analysis_scope"`
+	// Presets lists preset files the analyzer loads next to its
+	// built-in presets, each path absolute or relative to the
+	// directory of the vow.yaml that names it. A preset named like a
+	// built-in preset replaces it; any other adds to the set.
+	Presets []string `yaml:"presets"`
+	// LoadedPresets holds the presets Presets names, in the same
+	// order. ReadFile and LoadPresets fill it; Parse leaves it empty,
+	// since a payload read from no file has no directory to resolve
+	// the paths against.
+	LoadedPresets []LoadedPreset `yaml:"-"`
+}
+
+// LoadedPreset is one preset file a vow.yaml names, read and parsed.
+type LoadedPreset struct {
+	// Source is the file's content. --vet-mode hands it to the
+	// vettool, which keys its cached result on its flags and so cannot
+	// read the file itself.
+	Source []byte
+	// Preset is the preset Source parses to.
+	Preset *dsl.Preset
 }
 
 // AnalysisScope models the driver's package-loading scope knobs.
@@ -147,10 +171,11 @@ func decode(raw []byte) (*Config, error) {
 	return cfg, nil
 }
 
-// ReadFile reads the file at path and parses it as a vow.yaml. The
-// path must exist; callers handle the not-found case before reaching
-// this helper, because the absence of a file means "no config" rather
-// than "empty config" at the discovery layer.
+// ReadFile reads the file at path and parses it as a vow.yaml, loading
+// the preset files it names. The path must exist; callers handle the
+// not-found case before reaching this helper, because the absence of a
+// file means "no config" rather than "empty config" at the discovery
+// layer.
 //
 // vow:nil () ?,
 func ReadFile(path string) (*Config, error) {
@@ -162,5 +187,97 @@ func ReadFile(path string) (*Config, error) {
 	if err != nil {
 		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
+	if err := cfg.LoadPresets(filepath.Dir(path)); err != nil {
+		return nil, fmt.Errorf("%s: %w", path, err)
+	}
 	return cfg, nil
+}
+
+// LoadPresets reads and parses the preset files Presets names into
+// LoadedPresets, resolving a relative path against dir. Two files
+// that declare one preset name are an error, as CheckPresetNames
+// reports.
+func (c *Config) LoadPresets(dir string) error {
+	if len(c.Presets) == 0 {
+		return nil
+	}
+	loaded, err := seq.ChainOf(c.Presets...).MapOrErr(func(path string) (LoadedPreset, error) {
+		if !filepath.IsAbs(path) {
+			path = filepath.Join(dir, path)
+		}
+		raw, err := os.ReadFile(path)
+		if err != nil {
+			return LoadedPreset{}, fmt.Errorf("presets: %w", err)
+		}
+		preset, err := ParsePreset(raw)
+		if err != nil {
+			return LoadedPreset{}, fmt.Errorf("presets: %s: %w", path, err)
+		}
+		return LoadedPreset{Source: raw, Preset: preset}, nil
+	}).ToSlice()
+	if err != nil {
+		return err
+	}
+	if err := CheckPresetNames(loaded); err != nil {
+		return err
+	}
+	c.LoadedPresets = loaded
+	return nil
+}
+
+// CheckPresetNames reports two loaded presets that declare one name.
+// A preset replaces the built-in preset of its name, so of two such
+// presets one would either replace the other without a word or run
+// beside it.
+//
+// vow:nil (?)
+func CheckPresetNames(loaded []LoadedPreset) error {
+	seen := map[string]bool{}
+	dup, found := seq.ChainOf(loaded...).Find(func(p LoadedPreset) bool {
+		if seen[p.Preset.Name] {
+			return true
+		}
+		seen[p.Preset.Name] = true
+		return false
+	})
+	if found {
+		return fmt.Errorf("presets: two files declare the preset name %q", dup.Preset.Name)
+	}
+	return nil
+}
+
+// ParsePreset parses the content of a preset file a vow.yaml names. On
+// top of what dsl.Parse checks, every subject has to select a concept
+// through `vow:define @<Concept>`, and the preset may configure
+// nothing that vow reads only from its built-in presets: rules, which
+// vow:import reads only from the libraries built into vow, and the
+// Closable check, which is built in and takes its types from
+// closable.built_in_closables in vow.yaml.
+//
+// vow:nil (?) ?,
+func ParsePreset(raw []byte) (*dsl.Preset, error) {
+	preset, err := dsl.Parse(raw)
+	if err != nil {
+		return nil, err
+	}
+	if len(preset.Rules) > 0 {
+		return nil, fmt.Errorf("preset %q declares rules, which vow:import does not read from a loaded preset", preset.Name)
+	}
+	subject, found := seq.ChainOf(preset.Subjects...).Find(func(s dsl.Subject) bool {
+		_, ok := s.Concept()
+		return !ok
+	})
+	if found {
+		return nil, fmt.Errorf("preset %q subject %q selects no concept; write annotation:vow:define @<Concept>", preset.Name, subject.Match)
+	}
+	if preset.Name == "closable" {
+		return nil, fmt.Errorf("preset %q would replace the built-in closable preset; rename it, and set the Closable types with closable.built_in_closables in vow.yaml", preset.Name)
+	}
+	if len(preset.BuiltinClosables) > 0 {
+		return nil, fmt.Errorf("preset %q sets the Closable types, which closable.built_in_closables in vow.yaml sets", preset.Name)
+	}
+	if seq.ChainOf(preset.Obligations...).Any(func(o dsl.Obligation) bool { return o.Type == "must-close" }) {
+		return nil, fmt.Errorf("preset %q declares must-close, which no check reads: the Closable check is built in", preset.Name)
+	}
+	return preset, nil
 }

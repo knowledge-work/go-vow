@@ -1,0 +1,10 @@
+name: wrap-only
+subjects:
+  - match: "annotation:vow:define @WrapOnly"
+obligations:
+  - type: passthrough-emit
+    detail:
+      functions:
+        - pattern: "example.com/wraplib.Wrap"
+          arg-position: 0
+          return-slot: 1

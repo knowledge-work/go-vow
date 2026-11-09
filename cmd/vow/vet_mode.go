@@ -1,21 +1,30 @@
 package main
 
 import (
+	"encoding/json"
+	"fmt"
 	"slices"
 	"strconv"
 	"strings"
 
+	goanalysis "golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/unitchecker"
 
 	"github.com/knowledge-work/go-vow/internal/analysis"
 	"github.com/knowledge-work/go-vow/internal/cli"
 	"github.com/knowledge-work/go-vow/internal/config"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // vetConfigFlag is the flag name the analyzer publishes under `go vet`.
 // The go command prefixes it with the analyzer's name, so a vettool
 // invocation spells it `-vow.config`.
 const vetConfigFlag = "config"
+
+// vetPresetsFlag is the flag that carries the content of the preset
+// files the config names, as a JSON list of strings. The go command
+// prefixes it as it does vetConfigFlag.
+const vetPresetsFlag = "presets"
 
 // vetToolEnv marks the child side of a --vet-mode run. The go command
 // hands its own environment to the vettool, so a marker set on the `go
@@ -106,11 +115,25 @@ func hasDriverFlag(args []string) bool {
 // verdict. Passing a non-nil Config also switches the per-package
 // discovery off, which is what keeps that promise structural rather
 // than a matter of remembering.
+//
+// The preset files the config names arrive the same way, as content on
+// the presets flag. A config naming a different number of files than
+// that flag carries fails every package: running with the built-in
+// presets alone would report a verdict for a policy the run did not
+// apply.
 func runVettool() {
 	cfg := new(config.Config)
 	analyzer := analysis.NewDefault(cfg)
 	analyzer.Flags.Var(&vetConfigValue{cfg: cfg}, vetConfigFlag, "vow.yaml content applied to every package in the run")
+	analyzer.Flags.Var(vetPresetsValue{cfg: cfg}, vetPresetsFlag, "the content of the preset files the config names, as a JSON list of strings")
 	analyzer.Flags.Var(annotateNarrowValue{}, vetAnnotateFlag, "attach the narrow-scope inputs to each diagnostic instead of applying the scope")
+	run := analyzer.Run
+	analyzer.Run = func(pass *goanalysis.Pass) (any, error) {
+		if len(cfg.LoadedPresets) != len(cfg.Presets) {
+			return nil, fmt.Errorf("the config names %d preset files and -vow.%s carries %d; vow --vet-mode passes their content", len(cfg.Presets), vetPresetsFlag, len(cfg.LoadedPresets))
+		}
+		return run(pass)
+	}
 	unitchecker.Main(analyzer)
 }
 
@@ -153,13 +176,46 @@ func (v *vetConfigValue) String() string {
 	return v.text
 }
 
-// Set decodes yaml and replaces the analyzer's Config in place.
+// Set decodes yaml and replaces the analyzer's Config in place. The
+// presets the presets flag loaded stay, since config.Parse loads none.
 func (v *vetConfigValue) Set(yaml string) error {
 	parsed, err := config.Parse([]byte(yaml))
 	if err != nil {
 		return err
 	}
+	parsed.LoadedPresets = v.cfg.LoadedPresets
 	*v.cfg = *parsed
 	v.text = yaml
+	return nil
+}
+
+// vetPresetsValue parses the presets flag into the LoadedPresets of the
+// Config the analyzer closed over.
+type vetPresetsValue struct {
+	cfg *config.Config
+}
+
+// String returns "": the go command reports the value when describing
+// the tool's flags, and the content would only repeat the files.
+func (vetPresetsValue) String() string { return "" }
+
+// Set decodes the JSON list and parses each entry as a preset file,
+// rejecting two that declare one name as the driver does.
+func (v vetPresetsValue) Set(text string) error {
+	var sources []string
+	if err := json.Unmarshal([]byte(text), &sources); err != nil {
+		return err
+	}
+	loaded, err := seq.ChainOf(sources...).MapOrErr(func(source string) (config.LoadedPreset, error) {
+		preset, err := config.ParsePreset([]byte(source))
+		return config.LoadedPreset{Source: []byte(source), Preset: preset}, err
+	}).ToSlice()
+	if err != nil {
+		return err
+	}
+	if err := config.CheckPresetNames(loaded); err != nil {
+		return err
+	}
+	v.cfg.LoadedPresets = loaded
 	return nil
 }

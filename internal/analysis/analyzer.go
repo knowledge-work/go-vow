@@ -31,8 +31,9 @@ func NewDefault(override *config.Config) *analysis.Analyzer {
 	return New(builtinPresets(), override)
 }
 
-// New returns an analyzer configured to enforce the supplied presets.
-// The analyzer is read-only with respect to the presets; callers may
+// New returns an analyzer configured to enforce the supplied presets,
+// with the presets each package's config loads applied on top. The
+// analyzer is read-only with respect to the presets; callers may
 // reuse the slice. Each analyzer instance owns a fresh config
 // resolver so per-directory `vow.yaml` files discovered during a run
 // stay scoped to that run.
@@ -52,8 +53,9 @@ func New(presets []*dsl.Preset, override *config.Config) *analysis.Analyzer {
 	}
 }
 
-func runFunc(presets []*dsl.Preset, resolver *config.Resolver, override *config.Config) func(*analysis.Pass) (any, error) {
+func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Config) func(*analysis.Pass) (any, error) {
 	return func(pass *analysis.Pass) (any, error) {
+		presets := withLoadedPresets(base, packageConfig(pass, resolver, override))
 		state := newPassState(presets, resolver, override)
 		cleanup := registerPassState(pass, state)
 		defer cleanup()
@@ -328,11 +330,9 @@ func runFunc(presets []*dsl.Preset, resolver *config.Resolver, override *config.
 		validateNilDeclCompleteness(pass, state)
 		// Emit an info-level diagnostic for every vow:define
 		// occurrence whose concept does not have behaviour
-		// registered. The Sentinel and Closable concepts ship
-		// built-in; other concepts are forward-compat surface so
-		// authors can declare them ahead of preset configuration
-		// without the analyzer silently dropping the declaration.
-		reportConceptDefineDiagnostics(pass)
+		// registered, so a concept declared ahead of its preset is
+		// not dropped in silence.
+		reportConceptDefineDiagnostics(pass, presets)
 		// Discover statement-scope vow:emit markers and infer
 		// each marker's destination (goroutine launch, callback
 		// argument, storage write, or channel send). Authors use
@@ -347,6 +347,52 @@ func runFunc(presets []*dsl.Preset, resolver *config.Resolver, override *config.
 		validateClosableLifetime(pass, state)
 		return nil, nil
 	}
+}
+
+// packageConfig returns the config in effect for the pass's package:
+// override when the driver supplied one, else the nearest vow.yaml. It
+// returns nil when there is none, and when the nearest cannot be read,
+// which reportConfigError reports.
+//
+// vow:nil (,?,?) ?
+func packageConfig(pass *analysis.Pass, resolver *config.Resolver, override *config.Config) *config.Config {
+	if override != nil {
+		return override
+	}
+	dir := passPackageDirectory(pass)
+	if resolver == nil || dir == "" {
+		return nil
+	}
+	cfg, err := resolver.Resolve(dir)
+	if err != nil {
+		return nil
+	}
+	return cfg
+}
+
+// withLoadedPresets returns base with the presets cfg loads: a loaded
+// preset named like one in base takes its place, and any other is
+// appended. A nil cfg leaves base as it is.
+//
+// vow:nil (?,?) ?
+func withLoadedPresets(base []*dsl.Preset, cfg *config.Config) []*dsl.Preset {
+	if cfg == nil || len(cfg.LoadedPresets) == 0 {
+		return base
+	}
+	loaded := seq.ChainOf(cfg.LoadedPresets...).Map(func(l config.LoadedPreset) *dsl.Preset { return l.Preset })
+	byName := loaded.ToMap(func(p *dsl.Preset) (string, *dsl.Preset) { return p.Name, p })
+	baseNames := seq.ChainOf(base...).ToSet(func(p *dsl.Preset) string { return p.Name })
+	kept := seq.ChainOf(base...).Map(func(p *dsl.Preset) *dsl.Preset {
+		if replacement, ok := byName[p.Name]; ok {
+			return replacement
+		}
+		return p
+	}).ToSlice()
+	added := loaded.Filter(func(p *dsl.Preset) bool {
+		_, replaces := baseNames[p.Name]
+		return !replaces
+	}).ToSlice()
+	return append(kept, added...)
 }
 
 // reportConfigError reports, once per package, a vow.yaml the discovery
