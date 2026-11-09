@@ -1016,10 +1016,10 @@ func dropsLeak() error {
 
 Behaviour:
 
-- The marker affects must-consume, nil-safety, `nil-decl`, and
-  Closable acquisition and upcast diagnostics; other diagnostic
-  classes (return-position mismatch, parser errors, concept-system
-  info diagnostics) flow through untouched.
+- The marker affects must-consume, nil-safety, `nil-decl`,
+  `vow:readonly`, and Closable acquisition and upcast diagnostics;
+  other diagnostic classes (return-position mismatch, parser
+  errors, concept-system info diagnostics) flow through untouched.
 - Two scopes: a function-doc occurrence silences every such
   diagnostic inside the function; a line comment (trailing or
   leading the statement, mirroring `//nolint`) silences the

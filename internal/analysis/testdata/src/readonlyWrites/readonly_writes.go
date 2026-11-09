@@ -41,6 +41,14 @@ func writesAfterPassingToCall(name string) {
 	c.Name = name // want `vow\[readonly\]: Config reassigns a field after the value escaped`
 }
 
+// suppressedWriteAfterPassingToCall is writesAfterPassingToCall with a
+// `vow:suppress` marker on the write, which drops the report.
+func suppressedWriteAfterPassingToCall(name string) {
+	c := &Config{}
+	consume(c)
+	c.Name = name // vow:suppress: consume only reads the value
+}
+
 // writesAfterSending hands the value to a channel.
 func writesAfterSending(ch chan *Config, name string) {
 	c := &Config{}

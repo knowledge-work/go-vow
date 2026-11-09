@@ -183,6 +183,17 @@ func vowReportClosablef(pass *analysis.Pass, pos token.Pos, format string, args 
 	})
 }
 
+// vowReportReadonlyf is the readonly variant of vowReportf.
+// Diagnostics emitted here carry the readonly category so that a
+// `vow:suppress` marker can drop them.
+func vowReportReadonlyf(pass *analysis.Pass, pos token.Pos, format string, args ...any) {
+	vowReport(pass, analysis.Diagnostic{
+		Pos:      pos,
+		Category: categoryReadonly,
+		Message:  fmt.Sprintf(format, args...),
+	})
+}
+
 // vowReportMustConsumef is the must-consume variant of vowReportf.
 // Diagnostics emitted here carry a must-consume tag in Category so
 // the suppress filter can identify and drop them; the same Category

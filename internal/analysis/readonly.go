@@ -83,7 +83,7 @@ func reportWriteAfterEscape(pass *analysis.Pass, fn *ssa.Function, store *ssa.St
 	if !escapes || !readonlyPrecedes(escape, store) {
 		return
 	}
-	vowReportf(pass, store.Pos(),
+	vowReportReadonlyf(pass, store.Pos(),
 		"vow[readonly]: %s reassigns a field after the value escaped; a readonly type takes field assignments only while it is under construction",
 		named)
 }

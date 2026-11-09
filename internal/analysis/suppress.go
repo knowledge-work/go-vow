@@ -52,6 +52,10 @@ const categoryNilDecl = "nil-decl"
 // surface.
 const categoryClosable = "closable"
 
+// categoryReadonly tags the readonly write-after-escape diagnostic
+// so that vow:suppress can drop it.
+const categoryReadonly = "readonly"
+
 // suppressLineKey identifies a source line for line-level suppression.
 // Filename plus line number is the smallest pair that uniquely
 // identifies a source line across the per-pass FileSet without
@@ -297,5 +301,9 @@ func isSuppressibleCategory(cat string) bool {
 	if isMustConsumeCategory(cat) {
 		return true
 	}
-	return cat == categoryNilSafety || cat == categoryNilDecl || cat == categoryClosable
+	switch cat {
+	case categoryNilSafety, categoryNilDecl, categoryClosable, categoryReadonly:
+		return true
+	}
+	return false
 }
