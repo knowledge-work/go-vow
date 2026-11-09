@@ -53,6 +53,27 @@ func observedBySwitch(err error) error {
 	return nil
 }
 
+// --- observe: errors.Is in the case list of a tagless switch. ---
+
+func observedByTaglessSwitch(err error) int {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return 404
+	}
+	return 500
+}
+
+// --- leak: errors.Is in a case body, which is not a condition. ---
+
+func leakInCaseBody(err error) bool {
+	matched := false
+	switch {
+	case err != nil:
+		matched = errors.Is(err, ErrNotFound) // want `vow\[sentinel-error\]: sentinel error ErrNotFound leaked: needs observation or explicit propagation`
+	}
+	return matched
+}
+
 // --- chain: explicit propagation authorized by vow:cond. ---
 
 // chainedThroughAnnotation forwards the sentinel to its caller. The

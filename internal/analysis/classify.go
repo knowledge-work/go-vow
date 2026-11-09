@@ -166,7 +166,8 @@ func isObserveUse(pass *analysis.Pass, stack []ast.Node, observerNames []string,
 
 // isInConditional walks outward from the observation-shape node at
 // stack[shapeIdx] and reports whether some ancestor is an if/switch
-// with the shape sitting in its Cond / Init / Tag position.
+// with the shape sitting in its Cond / Init / Tag position, or a case
+// clause with the shape in its list (`switch { case errors.Is(...): }`).
 //
 // Intermediate "boolean-evaluation glue" is transparently traversed:
 //
@@ -191,6 +192,8 @@ func isInConditional(stack []ast.Node, shapeIdx int) bool {
 			return child == x.Cond || child == x.Init
 		case *ast.SwitchStmt:
 			return child == x.Tag || child == x.Init
+		case *ast.CaseClause:
+			return nodeAmong(child, x.List)
 		case *ast.AssignStmt, *ast.ParenExpr, *ast.BinaryExpr, *ast.UnaryExpr,
 			*ast.IndexExpr, *ast.TypeAssertExpr:
 			// Boolean-evaluation glue; keep walking outward.
