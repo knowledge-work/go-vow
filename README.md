@@ -95,7 +95,7 @@ vow ./...
 | `vow:emit` | Declares the callee's output side. The payload has three shapes: name-based, positional (`$N`), and passthrough (`name -> $N`). A statement-scope `vow:emit` additionally discharges a Closable lifecycle hand-off and dispatches to five recognised destinations: goroutine, callback, storage, channel, or wrapped-return. |
 | `vow:discharged` | Callee-authored marker on a function declaration. The annotated function counts as an all-verification barrier so callers may treat the call as discharging every obligation the function carries. |
 | `vow:suppress` | Suppression marker. The payload must carry a reason string so the suppression survives review. |
-| `vow:define` | Concept declaration. `@Sentinel` and `@Closable` are the built-in concepts; user-declared concepts attach behaviour to a `var` or `type` through preset configuration. |
+| `vow:define` | Concept declaration. `@Sentinel` and `@Closable` are the built-in concepts; a user-declared concept on a package-level `var` gets its behaviour from a preset that `vow.yaml` loads. |
 | `vow:import` | Imports a preset rule namespace into the package: `vow:import result "preset/std/result"` makes the namespace available for inline reference (`@result.OkErr[Result, error]`). |
 
 The [Annotations reference](docs/annotations.md) documents each
@@ -135,9 +135,11 @@ ships two built-in concepts:
 
 A `vow:define @<Concept>` declaration whose concept has no
 behaviour registered surfaces an info-level diagnostic so the
-author learns that preset configuration is pending. Adopters add
-new concepts by extending a preset YAML and registering the
-obligation pattern the concept follows.
+author learns that preset configuration is pending. To give a new
+concept behaviour, write a `must-consume` preset whose subject
+matches `annotation:vow:define @<Concept>` and list the file under
+`presets` in `vow.yaml`; see
+[Loading a preset](docs/presets.md#loading-a-preset).
 
 ## Presets
 
@@ -146,7 +148,7 @@ obligation pattern the concept follows.
 | `preset/sentinel-error.yaml` | Activates the must-consume obligation on every `vow:define @Sentinel` declaration. |
 | `preset/closable.yaml` | Activates the lifecycle-discharge obligation on every `vow:define @Closable` type and on a curated list of built-in Closable Go types (`*os.File`, `*net.TCPConn`, `*bufio.Writer`, `io.Closer`). |
 | `preset/std/result.yaml` | A reusable rule library for the `(Result, error)` return shape. Imported into a package with `vow:import result "preset/std/result"`. |
-| `example/werror.yaml` | A sample preset showing the wrapped-return shape `vow:emit` uses to recognise a wrap library's pass-through call as a chain-authorisation source. Adopters copy and adapt the shape for their own wrap helpers. |
+| `example/werror.yaml` | A sample preset showing the wrapped-return shape `vow:emit` uses to recognise a wrap library's pass-through call as a chain-authorisation source. Adopters copy and adapt the shape for their own wrap helpers, and list the copy under `presets` in `vow.yaml`. |
 
 See the [Presets guide](docs/presets.md) for the YAML schema and
 authoring walkthrough.

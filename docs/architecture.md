@@ -11,7 +11,9 @@ not).
 The analyzer runs once per package and walks the source files in a
 fixed order:
 
-1. **Preset discovery.** `runFunc` iterates the configured presets.
+1. **Preset discovery.** `runFunc` iterates the configured presets,
+   after the presets the package's `vow.yaml` loads replace the
+   built-in preset of the same name or join the list.
    Each preset names a subject scheme and an obligation type.
 2. **Subject selection.** `findSubjects` walks the package and
    returns the set of `types.Object`s that satisfy the subject
