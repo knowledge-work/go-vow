@@ -11,11 +11,20 @@
 package dsl
 
 import (
+	"bytes"
+	"errors"
 	"fmt"
+	"io"
+	"maps"
+	"math"
 	"os"
+	"slices"
 	"strings"
+	"unicode"
 
 	"gopkg.in/yaml.v3"
+
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // Preset is the top-level structure of a preset YAML file.
@@ -66,10 +75,16 @@ func Load(path string) (*Preset, error) {
 
 // Parse decodes a preset from in-memory YAML bytes. It is used both by
 // Load (for files on disk) and by callers that embed presets at build
-// time via //go:embed.
+// time via //go:embed. A key the preset schema does not define is
+// rejected, so a misspelled key surfaces as an error rather than as a
+// setting that silently does nothing.
 func Parse(raw []byte) (*Preset, error) {
 	var p Preset
-	if err := yaml.Unmarshal(raw, &p); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(raw))
+	dec.KnownFields(true)
+	// An empty document decodes as EOF; validate then reports what the
+	// preset lacks.
+	if err := dec.Decode(&p); err != nil && !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("parse: %w", err)
 	}
 	if err := p.validate(); err != nil {
@@ -81,8 +96,10 @@ func Parse(raw []byte) (*Preset, error) {
 // validate checks the structural invariants a parsed preset must
 // satisfy: the name is non-empty, the contribution set covers at
 // least one of subjects/obligations or rules, paired contribution
-// fields are both populated, and every rule has a name, a body, and
-// distinct parameters.
+// fields are both populated, the severity, when set, is the only one
+// there is, every subject uses the annotation scheme, every obligation
+// is of a type vow reads and carries the detail that type reads, and
+// every rule has a name, a body, and distinct parameters.
 //
 // vow:cond * -> ErrInvalidPreset | nil
 func (p *Preset) validate() error {
@@ -94,6 +111,9 @@ func (p *Preset) validate() error {
 	// (e.g. preset/std/result) skip the subject / obligation gates.
 	hasObligationContract := len(p.Subjects) > 0 || len(p.Obligations) > 0
 	hasRules := len(p.Rules) > 0
+	if p.Severity != "" && p.Severity != "warning" {
+		return fmt.Errorf("preset %q severity %q: vow reads no severity; write warning or omit it: %w", p.Name, p.Severity, ErrInvalidPreset)
+	}
 	if !hasObligationContract && !hasRules {
 		return fmt.Errorf("preset %q declares neither subjects/obligations nor rules: %w", p.Name, ErrInvalidPreset)
 	}
@@ -109,10 +129,16 @@ func (p *Preset) validate() error {
 		if strings.TrimSpace(s.Match) == "" {
 			return fmt.Errorf("preset %q subject[%d] has empty match: %w", p.Name, i, ErrInvalidPreset)
 		}
+		if s.AnnotationMarker() == "" {
+			return fmt.Errorf("preset %q subject[%d] match %q does not name a marker after annotation:, the only scheme: %w", p.Name, i, s.Match, ErrInvalidPreset)
+		}
 	}
 	for i, o := range p.Obligations {
 		if strings.TrimSpace(o.Type) == "" {
 			return fmt.Errorf("preset %q obligation[%d] has empty type: %w", p.Name, i, ErrInvalidPreset)
+		}
+		if err := o.validateDetail(); err != nil {
+			return fmt.Errorf("preset %q obligation[%d] (%s): %v: %w", p.Name, i, o.Type, err, ErrInvalidPreset)
 		}
 	}
 	for name, rule := range p.Rules {
@@ -142,6 +168,113 @@ func (s Subject) AnnotationMarker() string {
 		return strings.TrimSpace(strings.TrimPrefix(s.Match, prefix))
 	}
 	return ""
+}
+
+// Concept returns the concept an annotation-scheme subject selects
+// through `vow:define @<Concept>`, and false for a subject that names
+// any other marker.
+func (s Subject) Concept() (string, bool) {
+	name, ok := strings.CutPrefix(s.AnnotationMarker(), "vow:define @")
+	if !ok || !isName(name) {
+		return "", false
+	}
+	return name, true
+}
+
+// validateDetail checks an obligation against its type: the type must
+// be one vow reads, and the detail must hold only the
+// keys that type reads, in the shape it reads them. The readers below
+// skip what they cannot decode, so without this check a malformed
+// entry would do nothing and say nothing.
+func (o Obligation) validateDetail() error {
+	switch o.Type {
+	case "must-consume":
+		if err := rejectUnknownKeys("detail", o.Detail, "consumers"); err != nil {
+			return err
+		}
+		return validateNameList("detail.consumers", "function name", o.Detail["consumers"])
+	case "passthrough-emit":
+		if err := rejectUnknownKeys("detail", o.Detail, "functions"); err != nil {
+			return err
+		}
+		functions, ok := o.Detail["functions"].([]any)
+		if !ok {
+			return errors.New("detail.functions must be a list of wrap signatures")
+		}
+		return seq.WithIndex(seq.ChainOf(functions...)).EachOrErr(func(f seq.Indexed[any]) error {
+			return validatePassthroughEntry(fmt.Sprintf("detail.functions[%d]", f.Index), f.Value)
+		})
+	case "must-close":
+		if err := rejectUnknownKeys("detail", o.Detail, "discharges"); err != nil {
+			return err
+		}
+		if discharges, ok := o.Detail["discharges"]; ok {
+			return validateNameList("detail.discharges", "discharge name", discharges)
+		}
+	default:
+		return errors.New("not an obligation type vow reads; use must-consume or passthrough-emit (must-close belongs to the built-in closable preset)")
+	}
+	return nil
+}
+
+// validatePassthroughEntry checks one wrap signature of a
+// passthrough-emit obligation against the shape
+// PassthroughEmitFunctions reads. where names the entry in the error.
+func validatePassthroughEntry(where string, raw any) error {
+	entry, ok := raw.(map[string]any)
+	if !ok {
+		return fmt.Errorf("%s must be a map with pattern, arg-position, and return-slot", where)
+	}
+	if err := rejectUnknownKeys(where, entry, "pattern", "arg-position", "return-slot"); err != nil {
+		return err
+	}
+	if !isName(entry["pattern"]) {
+		return fmt.Errorf("%s.pattern must be a qualified function name without spaces", where)
+	}
+	if pos, ok := readPresetInt(entry["arg-position"]); !ok || pos < 0 {
+		return fmt.Errorf("%s.arg-position must be a 0-based parameter index", where)
+	}
+	if slot, ok := readPresetInt(entry["return-slot"]); !ok || slot < 1 {
+		return fmt.Errorf("%s.return-slot must be a 1-based return position", where)
+	}
+	return nil
+}
+
+// validateNameList checks that raw is a list whose every entry is a
+// name in the sense of isName. what is the singular noun the error
+// uses for an entry, and where names the list.
+func validateNameList(where, what string, raw any) error {
+	list, ok := raw.([]any)
+	if !ok {
+		return fmt.Errorf("%s must be a list, each entry a %s", where, what)
+	}
+	bad, found := seq.WithIndex(seq.ChainOf(list...)).Find(func(v seq.Indexed[any]) bool {
+		return !isName(v.Value)
+	})
+	if found {
+		return fmt.Errorf("%s[%d] must be a %s without spaces", where, bad.Index, what)
+	}
+	return nil
+}
+
+// isName reports whether v is a non-empty string without whitespace.
+// The analyzer compares a configured name with the call site as
+// written, so a name holding a space could never match one.
+func isName(v any) bool {
+	name, ok := v.(string)
+	return ok && name != "" && !strings.ContainsFunc(name, unicode.IsSpace)
+}
+
+// rejectUnknownKeys reports the first key of entries, in sorted order,
+// that is not among known. where names the map in the error.
+func rejectUnknownKeys(where string, entries map[string]any, known ...string) error {
+	key, found := seq.ChainOf(slices.Sorted(maps.Keys(entries))...).Find(func(key string) bool {
+		return !slices.Contains(known, key)
+	})
+	if found {
+		return fmt.Errorf("%s has unknown key %q", where, key)
+	}
+	return nil
 }
 
 // MustConsumeConsumers returns the list of qualified function names
@@ -189,7 +322,8 @@ type PassthroughEmitFunction struct {
 // negative, whose return-slot is non-positive, or whose YAML
 // shape does not decode as the expected types drops silently so
 // a partial obligation contributes the entries that parse
-// cleanly without breaking on the bad ones.
+// cleanly without breaking on the bad ones. Parse rejects such an
+// entry, so only an Obligation built in code can carry one.
 func (o Obligation) PassthroughEmitFunctions() []PassthroughEmitFunction {
 	if o.Type != "passthrough-emit" {
 		return nil
@@ -226,8 +360,9 @@ func (o Obligation) PassthroughEmitFunctions() []PassthroughEmitFunction {
 // readPresetInt reads a YAML scalar that may decode as int,
 // int64, or float64 (the latter when yaml.v3 inferred a numeric
 // type from the source). The helper reports ok=false when the
-// value is missing or not numeric so the caller can drop the
-// offending entry without crashing on the type assertion.
+// value is missing, not numeric, or not a whole number so the
+// caller can drop the offending entry without crashing on the type
+// assertion.
 func readPresetInt(v any) (int, bool) {
 	switch n := v.(type) {
 	case int:
@@ -235,6 +370,9 @@ func readPresetInt(v any) (int, bool) {
 	case int64:
 		return int(n), true
 	case float64:
+		if n != math.Trunc(n) {
+			return 0, false
+		}
 		return int(n), true
 	}
 	return 0, false
