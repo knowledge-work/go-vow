@@ -480,18 +480,18 @@ tandem, and the two passes report independently.
   set of every preset whose marker the fact lists. A sentinel that
   reaches a package only inside a callee's `error` result is not
   tracked there, since nothing in that package names it.
-- **Qualified references.** Two checks read a qualified name, and
-  they read it differently. The return-annotation check compares a
-  `vow:cond` Term on the axes the DSL reference lists, so a Term
-  written with the import path (`example.com/store.ErrFoo`) matches
-  a `return s.ErrFoo` whatever local name the file gives the
-  package. The must-consume check names the subject the way the
-  reference spells it — `store.ErrFoo`, the local name of a renamed
-  import, or the bare name under a dot import — and `vow:cond`,
-  `vow:emit`, and `vow:use` authorise or discharge it only under
-  that name. The name follows each file's imports, so a `vow:use`
-  function matches calls only from files that import the package
-  under the same name.
+- **Qualified references.** The must-consume check names the
+  subject the way the reference spells it — `store.ErrFoo`, the
+  local name of a renamed import, or the bare name under a dot
+  import — and `vow:emit` and `vow:use` authorise or discharge it
+  only under that name. A `vow:cond` Term may also give the import
+  path (`example.com/store.ErrFoo`): the return-annotation check
+  matches it through the `fullName` axis, and the chain
+  authorisation resolves the spelt name to the same form, so it
+  matches whatever local name the file gives the package. The spelt
+  name follows each file's imports, so a `vow:use` function matches
+  calls only from files that import the package under the same
+  name.
 - **Generics.** The SSA pass's `findSSAFunction` maps an
   `*ast.FuncDecl` to its `*ssa.Function` by `Syntax()` pointer
   equality. Under the default `buildssa.BuilderMode(0)`, a generic

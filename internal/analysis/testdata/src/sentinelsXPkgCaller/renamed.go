@@ -25,3 +25,12 @@ func emitAuthorisedRenamed() error {
 	y := x
 	return y
 }
+
+// condImportPathRenamed lists the sentinel by its import path, which
+// matches whatever local name the file gives the package, so the
+// return both passes the sum and is authorised.
+//
+// vow:cond * -> sentinelsXPkgCallee.ErrShared | nil
+func condImportPathRenamed() error {
+	return shared.ErrShared
+}

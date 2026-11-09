@@ -124,3 +124,11 @@ var ErrOther = errors.New("other")
 func returnNonSentinel() error {
 	return ErrOther
 }
+
+// chainedThroughImportPath lists the sentinel by its import path, which
+// authorises the return as the bare name does.
+//
+// vow:cond * -> sentinels.ErrNotFound | nil
+func chainedThroughImportPath() error {
+	return ErrNotFound
+}
