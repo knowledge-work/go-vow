@@ -110,7 +110,7 @@ with a `vow.yaml` further up.
 
 | Key | Purpose |
 |-----|---------|
-| `closable.built_in_closables` | Replace the standard-library and convention types treated as `@Closable` (`*os.File`, `*net.TCPConn`, `*bufio.Writer`, `io.Closer`). An empty list replaces it with nothing; types carrying `vow:define @Closable` participate either way. See [Annotations](annotations.md). |
+| `closable.built_in_closables` | Replace the standard-library and convention types treated as `@Closable` (`*os.File`, `*net.TCPConn`, `io.Closer`). An empty list replaces it with nothing; types carrying `vow:define @Closable` participate either way. See [Annotations](annotations.md). |
 | `nil_decl.require_declarations` | Turn on the declaration-completeness rule, which is off by default. See [Annotations](annotations.md). |
 | `caller_resolver.exclude_package_suffixes` | Drop packages whose import path ends in one of these suffixes from the scope `--with-callers` computes. Empty by default. |
 | `analysis_scope.first_party_prefixes` | Parse and analyze only the target packages and the dependencies whose import path falls under one of these prefixes; every other dependency contributes type information from export data and is neither parsed nor analyzed. Empty (the default) keeps the whole-closure load. |

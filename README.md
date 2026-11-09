@@ -144,7 +144,7 @@ obligation pattern the concept follows.
 | Preset | Purpose |
 |--------|---------|
 | `preset/sentinel-error.yaml` | Activates the must-consume obligation on every `vow:define @Sentinel` declaration. |
-| `preset/closable.yaml` | Activates the lifecycle-discharge obligation on every `vow:define @Closable` type and on a curated list of built-in Closable Go types (`*os.File`, `*net.TCPConn`, `*bufio.Writer`, `io.Closer`). |
+| `preset/closable.yaml` | Activates the lifecycle-discharge obligation on every `vow:define @Closable` type and on a curated list of built-in Closable Go types (`*os.File`, `*net.TCPConn`, `io.Closer`). |
 | `preset/std/result.yaml` | A reusable rule library for the `(Result, error)` return shape. Imported into a package with `vow:import result "preset/std/result"`. |
 | `example/werror.yaml` | A sample preset showing the wrapped-return shape `vow:emit` uses to recognise a wrap library's pass-through call as a chain-authorisation source. Adopters copy and adapt the shape for their own wrap helpers. |
 

@@ -20,7 +20,6 @@ subjects:
 built_in_closables:
   - "*os.File"
   - "*net.TCPConn"
-  - "*bufio.Writer"
   - "io.Closer"
 
 # The `must-close` type is not dispatched by the preset loop in

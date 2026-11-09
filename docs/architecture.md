@@ -401,7 +401,7 @@ acquisition to discharge. The pipeline runs in three steps:
    declarations carrying `// vow:define @Closable` (walked by
    `discoverClosableTypeNames` over the package's `TypeSpec` nodes)
    and the `built_in_closables` list from the closable preset
-   (`*os.File`, `*net.TCPConn`, `*bufio.Writer`, `io.Closer`).
+   (`*os.File`, `*net.TCPConn`, `io.Closer`).
 2. **Caller-side `vow:emit` discovery.** `discoverCallerEmit`
    walks every comment group for statement-scope `// vow:emit X`
    markers. Each marker anchors to a statement line through the

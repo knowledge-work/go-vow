@@ -71,10 +71,10 @@ Discharges:
 
 Built-in Closable types ship through the `closable` preset's
 `built_in_closables` list (`*os.File`, `*net.TCPConn`,
-`*bufio.Writer`, `io.Closer`) so standard-library values flow
-through the same lifecycle check without a user-side annotation.
-A generic type parameter counts as Closable when its constraint
-names or embeds a Closable interface.
+`io.Closer`) so standard-library values flow through the same
+lifecycle check without a user-side annotation. A generic type
+parameter counts as Closable when its constraint names or embeds a
+Closable interface.
 
 Upcast invariant:
 
