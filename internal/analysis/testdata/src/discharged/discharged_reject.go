@@ -17,3 +17,11 @@ func lineLevelMarkerRejected() error {
 	// vow:discharged // want `vow\[sentinel-error\]: vow:discharged is only legal in a function doc comment`
 	return nil
 }
+
+// lineLevelOtherName carries a longer name that only starts with the
+// marker, which is reported as an unknown marker rather than as a
+// misplaced vow:discharged.
+func lineLevelOtherName() error {
+	// vow:dischargedX // want `vow\[annotation\]: vow:dischargedX is not a marker the analyzer reads`
+	return nil
+}

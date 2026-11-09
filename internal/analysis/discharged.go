@@ -100,7 +100,7 @@ func reportLineLevelDischarged(pass *analysis.Pass) {
 			}
 			for _, c := range cg.List {
 				text := commentLineBody(c.Text)
-				if !strings.HasPrefix(text, dischargedMarker) {
+				if text != dischargedMarker && !strings.HasPrefix(text, dischargedMarker+" ") {
 					continue
 				}
 				vowReportf(
