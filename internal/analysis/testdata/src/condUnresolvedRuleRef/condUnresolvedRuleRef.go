@@ -40,8 +40,8 @@ func scopedMarker(cb func() *Foo) (*Foo, error) { // want `vow\[sentinel-error\]
 	return cb(), nil
 }
 
-// plainCondition carries a reference-free rule, which resolves
-// through the ordinary parser and must not reach this surface.
+// plainCondition carries a reference-free rule that parses, so it
+// stays silent.
 //
 // vow:cond foo != nil <=> err == nil
 func plainCondition() (foo *Foo, err error) {
