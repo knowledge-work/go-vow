@@ -122,8 +122,12 @@ func carriedMarkers(doc *ast.CommentGroup, markers []string) []string {
 // markerLineMatches reports whether line carries the configured
 // marker. A line matches when it is exactly the marker or when the
 // marker is followed by a space — the trailing-content prefix form
-// the rest of the analyzer treats as a payload boundary.
+// the rest of the analyzer treats as a payload boundary. A run of
+// spaces or tabs counts as one space, so `vow:define  @Sentinel`
+// selects the variable as the Closable reader does for its types.
 func markerLineMatches(line, marker string) bool {
+	line = strings.Join(strings.Fields(line), " ")
+	marker = strings.Join(strings.Fields(marker), " ")
 	return line == marker || strings.HasPrefix(line, marker+" ")
 }
 

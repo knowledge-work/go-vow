@@ -49,6 +49,14 @@ func LeakBlockDefine() error { return ErrBlockDefine } // want `sentinel error E
 
 func LeakDirectiveDefine() error { return ErrDirectiveDefine }
 
+// The spacing between the define marker and its concept does not
+// matter, so this leak is reported too.
+//
+// vow:define  @Sentinel
+var ErrTwoSpaces = errors.New("two spaces") // want ErrTwoSpaces:"subject\\(vow:define @Sentinel\\)"
+
+func LeakTwoSpaces() error { return ErrTwoSpaces } // want `sentinel error ErrTwoSpaces leaked`
+
 // Prose that mentions vow:nill in the middle of a line stays silent,
 // and so does a line where vow: is not followed by a marker name:
 // vow: the analyzer.
