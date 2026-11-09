@@ -10,8 +10,8 @@ import (
 	"github.com/knowledge-work/go-vow/internal/dsl"
 )
 
-// validateSubjectScopedLogicalConds walks every function-doc
-// vow:cond[subject] marker carrying a logical-arrow rule and
+// validateSubjectScopedLogicalConds walks every function-doc marker
+// of the form vow:cond[subject] carrying a logical-arrow rule and
 // validates that each Expression's reference resolves within the
 // callback subject's signature scope. The marker delegates the
 // rule's evaluation to the callback rather than to the enclosing
@@ -54,7 +54,7 @@ func validateSubjectScopedLogicalConds(pass *analysis.Pass, state *passState) {
 // then validates every logical-arrow rule's operands against that
 // signature scope. Chain failures (unresolved segment or
 // intermediate non-callback) are reported elsewhere — by the
-// vow:cond discovery walk that runs ahead of this validator — so
+// discovery walk of vow:cond that runs ahead of this validator — so
 // this helper silently returns when the chain does not resolve.
 // A successfully resolved chain whose innermost slot is not
 // callback-typed also returns silently because a layer-specific

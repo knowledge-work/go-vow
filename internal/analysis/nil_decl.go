@@ -226,8 +226,8 @@ func checkInterfaceMethodSignatureArity(pass *analysis.Pass, field *ast.Field, f
 // Subject means the marker carried no scope and the declaration
 // applies to the enclosing function as usual.
 //
-// vow:cond * -> _, ok (bool) reflects "marker present, parse succeeded"
-// vs "no marker or parse failed". Parse-failure diagnostics anchor
+// The ok result reflects "marker present, parse succeeded" vs "no
+// marker or parse failed". Parse-failure diagnostics anchor
 // at the function declaration so the author sees one error per
 // malformed marker site.
 func collectNilSignature(pass *analysis.Pass, fn *ast.FuncDecl) (*dsl.NilSignature, bool) {

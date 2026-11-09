@@ -130,7 +130,7 @@ func renderReturnAnnotation(a *ReturnAnnotation) string {
 // ParseConditionAnnotation parses a `vow:cond` payload. The
 // current grammar accepts one or more rules separated by `;`:
 //
-//	vow:cond rule (';' rule)*
+//	payload := rule (';' rule)*
 //
 // Each rule is either an atom-rule (a bare rule reference such as
 // `@result.OkErr[T, E]`) or an arrow-rule (`prereq -> conseq`).

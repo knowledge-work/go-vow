@@ -7,8 +7,8 @@ package sentinels
 // requirements. Chain authorisation likewise unions every
 // trivial-Prereq case's admission set.
 
-// rulesMarkerAccumulates carries an earlier trivial-Prereq
-// vow:cond that authorises ErrFoo and a later vow:cond that
+// rulesMarkerAccumulates carries an earlier trivial-Prereq rule
+// that authorises ErrFoo and a later vow:cond that
 // narrows the return requirement to the `nonnil x` branch. The
 // trivial-Prereq rule continues to authorise ErrFoo for chain
 // propagation at every return; the non-trivial vow:cond
