@@ -18,8 +18,8 @@ import (
 // markerPrefix starts every marker the analyzer reads.
 const markerPrefix = "vow:"
 
-// markerShape is how the analyzer reads one marker: which bytes may
-// follow the marker name (the end of the line always may), and
+// markerShape is how the analyzer reads one marker: which characters
+// may follow the marker name (the end of the line always may), and
 // whether the reader goes through CommentGroup.Text. That method
 // unwraps /* */ comments but drops a `//vow:...` line written with no
 // space after the slashes, because it takes the line for a directive
@@ -28,8 +28,8 @@ type markerShape struct {
 	marker     string
 	separators string
 	groupText  bool
-	// hint tells the author how to write the marker when the byte
-	// after the name is not one of separators.
+	// hint tells the author how to write the marker when the
+	// character after the name is not one of separators.
 	hint string
 }
 
@@ -141,8 +141,8 @@ func markerLineStarts(text string) iter.Seq[int] {
 }
 
 // malformedMarkerMessage returns what is wrong with line, a trimmed
-// comment line that starts with vow:, or ok=false when the reader of
-// its shape accepts it. A line whose vow: is not followed by a letter
+// comment line that starts with vow:, or ok=false when the marker's
+// reader accepts it. A line whose vow: is not followed by a letter
 // is prose rather than a marker and stays silent.
 func malformedMarkerMessage(shapes []markerShape, line string, form commentForm) (message string, ok bool) {
 	rest := line[len(markerPrefix):]

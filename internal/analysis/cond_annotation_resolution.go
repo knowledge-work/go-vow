@@ -33,8 +33,8 @@ func validateCondAnnotationResolution(pass *analysis.Pass, state *passState) {
 			}
 			for _, c := range fn.Doc.List {
 				line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
-				// splitDocMarker skips a marker with no payload, which
-				// is a line that does not parse, so match it here.
+				// A bare marker is also a line that does not parse, so
+				// match the marker with or without a payload.
 				chain, payload, ok := stripMarkerScopeChain(line, rulesMarker)
 				if !ok {
 					continue

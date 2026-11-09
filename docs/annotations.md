@@ -5,13 +5,17 @@ markers. This page lists each `vow:` marker, where it must be
 placed, and what it changes about the analyzer's behaviour.
 
 Write each marker at the start of its own `//` comment line; only
-`vow:define` and `vow:discharged` are also read from a `/* */`
-comment. The parser anchors on the line prefix, so a marker buried in
-prose is not recognised. A comment line that starts with `vow:` but
-whose marker name, or the character after it, is not one a reader
-accepts, such as `vow:nill`, `vow:nil(!)`, or a `vow:nil` inside a
-`/* */` comment, is reported as a `vow[annotation]` diagnostic
-instead of being ignored.
+`vow:define`, `vow:discharged`, and the markers a preset selects on
+are also read from a `/* */` comment. The parser anchors on the line
+prefix, so a marker buried in prose is not recognised.
+
+A comment line that starts with `vow:` but is not recognised as a
+marker is reported as a `vow[annotation]` diagnostic instead of being
+ignored. The causes are an unknown marker name (`vow:nill`), a
+character after the name that the marker does not accept
+(`vow:nil(!)`), a malformed `[subject]` scope, and a comment form the
+marker is not read from (a `/* */` comment, or `//vow:define` with no
+space after the slashes).
 
 ## `vow:define @Sentinel`
 
@@ -1176,9 +1180,9 @@ Re-flow the sentence so the marker appears mid-line:
 ```
 
 Indentation does not help, because the analyzer trims it. A line that
-starts with a marker name is read as that marker, and most markers
-report a payload they cannot parse; a `vow:define` or `vow:import`
-line whose payload does not parse is still ignored.
+starts with a marker name is read as that marker; only for
+`vow:define` and `vow:import` is a payload that does not parse still
+ignored rather than reported.
 
 The same constraint applies to vow's own source comments — see
 the in-repo guides under `internal/analysis/emit_shorthand.go`
