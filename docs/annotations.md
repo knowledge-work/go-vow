@@ -4,10 +4,13 @@ Every contract `vow` enforces is conveyed through doc-comment
 markers. This page lists each `vow:` marker, where it must be
 placed, and what it changes about the analyzer's behaviour.
 
-Markers must appear on their own comment line (or as the first
-token of a multi-line comment block parsed from `Doc.Text()`). The
-parser anchors on the line prefix, so a marker buried in prose is
-not recognised.
+Write each marker at the start of its own `//` comment line; only
+`vow:define` and `vow:discharged` are also read from a `/* */`
+comment. The parser anchors on the line prefix, so a marker buried in
+prose is not recognised. A comment line that starts with `vow:` but
+does not read as a marker, such as `vow:nill`, `vow:nil(!)`, or a
+`vow:nil` inside a `/* */` comment, is reported as a
+`vow[annotation]` diagnostic instead of being ignored.
 
 ## `vow:define @Sentinel`
 
@@ -1165,21 +1168,13 @@ declaration:
 func helper() { ... }
 ```
 
-Two safe options keep the prose readable without misleading the
-analyzer:
+Re-flow the sentence so the marker appears mid-line. Indentation
+does not help, because the analyzer trims it, and a line that starts
+with a marker name but does not parse as one is reported:
 
-- Re-flow the sentence so the marker appears mid-line:
-
-  ```go
-  // helper documents the payload format of the vow:emit marker.
-  ```
-
-- Use indentation or punctuation to break the prefix match:
-
-  ```go
-  // helper documents the
-  //   vow:emit marker (indented; the analyzer skips).
-  ```
+```go
+// helper documents the payload format of the vow:emit marker.
+```
 
 The same constraint applies to vow's own source comments — see
 the in-repo guides under `internal/analysis/emit_shorthand.go`
