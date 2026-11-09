@@ -57,6 +57,11 @@ var ErrTwoSpaces = errors.New("two spaces") // want ErrTwoSpaces:"subject\\(vow:
 
 func LeakTwoSpaces() error { return ErrTwoSpaces } // want `sentinel error ErrTwoSpaces leaked`
 
+// A tab after vow:import is not read, so it is reported.
+//
+// vow:import	result "preset/std/result" // want `vow\[annotation\]: vow:import followed by '\\t' is not read as the marker`
+func ImportTab() {}
+
 // Prose that mentions vow:nill in the middle of a line stays silent,
 // and so does a line where vow: is not followed by a marker name:
 // vow: the analyzer.

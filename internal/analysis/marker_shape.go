@@ -40,9 +40,9 @@ const (
 var markerShapes = []markerShape{
 	{marker: rulesMarker, separators: " \t[", hint: hintPayloadSpace},
 	{marker: conceptDefineMarker, separators: " \t", groupText: true, hint: hintPayloadSpace},
-	{marker: dischargedMarker, separators: " \t", groupText: true, hint: hintNoPayload},
+	{marker: dischargedMarker, separators: " ", groupText: true, hint: hintNoPayload},
 	{marker: emitMarker, separators: " \t[", hint: hintPayloadSpace},
-	{marker: importMarker, separators: " \t", hint: hintPayloadSpace},
+	{marker: importMarker, separators: " ", hint: hintPayloadSpace},
 	{marker: nilDeclMarker, separators: " \t[", hint: hintPayloadSpace},
 	{marker: readonlyMarker, hint: hintNoPayload},
 	{marker: suppressMarker, separators: ":", hint: "write vow:suppress: <reason>"},
