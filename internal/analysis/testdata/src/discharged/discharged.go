@@ -8,4 +8,4 @@ import "errors"
 
 // ErrFoo is the subject under test.
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"

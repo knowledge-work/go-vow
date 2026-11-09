@@ -8,13 +8,13 @@ import "errors"
 // their own and read as a coherent table.
 
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // vow:define @Sentinel
-var ErrBar = errors.New("bar")
+var ErrBar = errors.New("bar") // want ErrBar:"subject\\(vow:define @Sentinel\\)"
 
 // vow:define @Sentinel
-var ErrBaz = errors.New("baz")
+var ErrBaz = errors.New("baz") // want ErrBaz:"subject\\(vow:define @Sentinel\\)"
 
 // chainBySumOK forwards ErrFoo or ErrBar; both are listed in the
 // direct sum, so the must-consume rule treats them as chain. Returning

@@ -17,7 +17,7 @@ import (
 // pending-configuration note.
 //
 // vow:define @Miss
-var ErrMiss = errors.New("miss")
+var ErrMiss = errors.New("miss") // want ErrMiss:"subject\\(vow:define @Miss\\)"
 
 // Unregistered belongs to a concept no preset selects, so the note
 // still applies.
@@ -30,7 +30,7 @@ var Unregistered = struct{}{} // want `vow\[concept\]: vow:define @Unregistered:
 // note still applies.
 //
 // vow:define @WrapOnly
-var WrapOnly = errors.New("wrap only") // want `vow\[concept\]: vow:define @WrapOnly: concept declared but no behavior registered \(preset configuration pending\)`
+var WrapOnly = errors.New("wrap only") // want WrapOnly:"subject\\(vow:define @WrapOnly\\)" `vow\[concept\]: vow:define @WrapOnly: concept declared but no behavior registered \(preset configuration pending\)`
 
 // observed hands ErrMiss to the consumer the preset lists.
 func observed(err error) bool {

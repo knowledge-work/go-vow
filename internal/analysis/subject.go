@@ -27,17 +27,28 @@ func (s subjectSet) contains(obj types.Object) bool {
 	return ok
 }
 
-// findSubjects walks the package and returns the set of objects that
-// satisfy one of preset's Subjects. The current implementation
-// recognises annotation markers on package-level var declarations.
+// findSubjects returns the set of objects that satisfy one of preset's
+// Subjects: the package's own package-level vars whose doc carries one
+// of the preset's annotation markers, and the vars from other packages
+// that the package refers to and whose subjectFact lists one of those
+// markers.
 func findSubjects(pass *analysis.Pass, preset *dsl.Preset) subjectSet {
 	markers := annotationMarkers(preset)
 	if len(markers) == 0 {
 		return nil
 	}
+	found := importedSubjects(pass, markers)
+	for obj := range declaredSubjectMarkers(pass, markers) {
+		found[obj] = struct{}{}
+	}
+	return found
+}
 
+// declaredSubjectMarkers maps each of the package's own package-level
+// vars whose doc carries one of markers to the markers it carries.
+func declaredSubjectMarkers(pass *analysis.Pass, markers []string) map[*types.Var][]string {
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
-	found := subjectSet{}
+	found := map[*types.Var][]string{}
 	filter := []ast.Node{(*ast.GenDecl)(nil)}
 
 	insp.Preorder(filter, func(n ast.Node) {
@@ -50,7 +61,8 @@ func findSubjects(pass *analysis.Pass, preset *dsl.Preset) subjectSet {
 			if !ok {
 				continue
 			}
-			if !hasAnyMarker(docOf(gd, vs), markers) {
+			carried := carriedMarkers(docOf(gd, vs), markers)
+			if len(carried) == 0 {
 				continue
 			}
 			for _, ident := range vs.Names {
@@ -61,7 +73,7 @@ func findSubjects(pass *analysis.Pass, preset *dsl.Preset) subjectSet {
 				if !isPackageLevel(obj) {
 					continue
 				}
-				found[obj] = struct{}{}
+				found[obj] = carried
 			}
 		}
 	})
@@ -88,25 +100,23 @@ func docOf(gd *ast.GenDecl, vs *ast.ValueSpec) *ast.CommentGroup {
 	return vs.Doc
 }
 
-// hasAnyMarker reports whether the doc comment contains a line that
-// begins with one of the requested markers. Anchoring to the start
-// of a line — rather than matching anywhere inside the comment
-// text — keeps the rule from misfiring on prose that merely mentions
-// a marker (e.g. "this variable has no vow:define @Sentinel
-// annotation").
-func hasAnyMarker(doc *ast.CommentGroup, markers []string) bool {
+// carriedMarkers returns the members of markers that begin a line of
+// doc, in the order markers lists them. Anchoring to the start of a
+// line — rather than matching anywhere inside the comment text — keeps
+// the rule from misfiring on prose that merely mentions a marker (e.g.
+// "this variable has no vow:define @Sentinel annotation").
+func carriedMarkers(doc *ast.CommentGroup, markers []string) []string {
 	if doc == nil {
-		return false
+		return nil
 	}
-	for _, line := range strings.Split(doc.Text(), "\n") {
-		line = strings.TrimSpace(line)
-		if slices.ContainsFunc(markers, func(m string) bool {
-			return markerLineMatches(line, m)
-		}) {
-			return true
-		}
-	}
-	return false
+	lines := seq.ChainOf(strings.Split(doc.Text(), "\n")...).Map(strings.TrimSpace).ToSlice()
+	return seq.ChainOf(markers...).
+		Filter(func(m string) bool {
+			return slices.ContainsFunc(lines, func(line string) bool {
+				return markerLineMatches(line, m)
+			})
+		}).
+		ToSlice()
 }
 
 // markerLineMatches reports whether line carries the configured

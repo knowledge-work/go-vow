@@ -11,7 +11,7 @@ import (
 
 // ErrNotFound is the subject under test.
 // vow:define @Sentinel
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = errors.New("not found") // want ErrNotFound:"subject\\(vow:define @Sentinel\\)"
 
 // --- observe: errors.Is inside an if condition. ---
 

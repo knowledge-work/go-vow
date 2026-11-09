@@ -14,7 +14,7 @@ import (
 // ErrFoo is the subject the must-consume rule tracks. Returning it
 // without an observation or vow:cond path leaks.
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // ErrBar exists so the condition-violation test can return a
 // sentinel that is not listed in the vow:cond sum. Both subjects
@@ -22,7 +22,7 @@ var ErrFoo = errors.New("foo")
 // consume diagnostic on ErrBar while leaving the return-position
 // violation untouched.
 // vow:define @Sentinel
-var ErrBar = errors.New("bar")
+var ErrBar = errors.New("bar") // want ErrBar:"subject\\(vow:define @Sentinel\\)"
 
 // --- baseline: must-consume leaks without any suppress marker ---
 

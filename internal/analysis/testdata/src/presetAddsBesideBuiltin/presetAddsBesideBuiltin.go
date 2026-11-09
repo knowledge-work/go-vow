@@ -14,7 +14,7 @@ import (
 // ErrGone is a sentinel both presets track.
 //
 // vow:define @Sentinel
-var ErrGone = errors.New("gone")
+var ErrGone = errors.New("gone") // want ErrGone:"subject\\(vow:define @Sentinel\\)"
 
 // observed satisfies the added preset, whose consumers include
 // misslib.IsMiss, but not the built-in one.

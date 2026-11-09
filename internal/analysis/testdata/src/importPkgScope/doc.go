@@ -9,10 +9,10 @@ package importPkgScope
 import "errors"
 
 // vow:define @Sentinel
-var OkMarker = errors.New("ok")
+var OkMarker = errors.New("ok") // want OkMarker:"subject\\(vow:define @Sentinel\\)"
 
 // vow:define @Sentinel
-var ErrNotReady = errors.New("not ready")
+var ErrNotReady = errors.New("not ready") // want ErrNotReady:"subject\\(vow:define @Sentinel\\)"
 
 // declaringFileResolves pins that the declaring file keeps
 // resolving its own alias.

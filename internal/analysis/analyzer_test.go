@@ -14,7 +14,7 @@ import (
 )
 
 func TestAnalyzer(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), Analyzer, "readonlyWrites", "sentinels", "composed", "import_unknown", "importPkgScope", "qualified_pkg", "qualified_consumer", "suppress", "discharged", "vowUse", "useHint", "concept", "vowEmit", "nilDeclBasic", "nilDeclKeywordForm", "nilDeclNest", "nilDeclNestArity", "nilDeclNestGenericNarrow", "nilDeclLayer", "nilDeclReassign", "nilDeclNarrow", "nilDeclFieldNarrow", "nilDeclFieldDeref", "nilDeclField", "nilDeclFieldAssign", "nilDeclFieldAssignFlow", "nilDeclCallResult", "nilDeclFieldConstruct", "nilDeclFieldConstructWhole", "nilDeclFieldReach", "nilDeclFieldGeneric", "nilDeclSelfBasic", "nilDeclCallerDeadGuard", "nilDeclSelfFlow", "nilDeclSelfNest", "nilDeclSelfRecv", "nilDeclReceiver", "nilDeclInterfaceMethod", "nilDeclXPkgCallee", "nilDeclXPkgCaller", "lifecycle_defer", "lifecycle_async", "lifecycle_callback", "lifecycle_storage", "lifecycle_channel", "higher_order", "higher_order_chain", "condGrammar", "condLogicalXPkgCallee", "condLogicalXPkgCaller", "condInconsistency", "condTagExhaustive", "condRangeNarrow", "condValueSum", "condPathNarrow", "condLifecyclePair", "condLifecyclePairXPkgCallee", "condLifecyclePairXPkgCaller", "closableGeneric", "closableStdHandle", "closableSuppress", "closableDeferredBorrow", "closableBufioWriter", "condCallerDeadGuard", "condCallerSafetyViolation", "condCallerNegativeForm", "condCallerGeneralCmp", "condUnresolvedRuleRef", "condTupleTypedElement", "condTupleXPkgPayload", "condTupleXPkgType")
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "readonlyWrites", "sentinels", "sentinelsXPkgCallee", "sentinelsXPkgCaller", "composed", "import_unknown", "importPkgScope", "qualified_pkg", "qualified_consumer", "suppress", "discharged", "vowUse", "useHint", "concept", "vowEmit", "nilDeclBasic", "nilDeclKeywordForm", "nilDeclNest", "nilDeclNestArity", "nilDeclNestGenericNarrow", "nilDeclLayer", "nilDeclReassign", "nilDeclNarrow", "nilDeclFieldNarrow", "nilDeclFieldDeref", "nilDeclField", "nilDeclFieldAssign", "nilDeclFieldAssignFlow", "nilDeclCallResult", "nilDeclFieldConstruct", "nilDeclFieldConstructWhole", "nilDeclFieldReach", "nilDeclFieldGeneric", "nilDeclSelfBasic", "nilDeclCallerDeadGuard", "nilDeclSelfFlow", "nilDeclSelfNest", "nilDeclSelfRecv", "nilDeclReceiver", "nilDeclInterfaceMethod", "nilDeclXPkgCallee", "nilDeclXPkgCaller", "lifecycle_defer", "lifecycle_async", "lifecycle_callback", "lifecycle_storage", "lifecycle_channel", "higher_order", "higher_order_chain", "condGrammar", "condLogicalXPkgCallee", "condLogicalXPkgCaller", "condInconsistency", "condTagExhaustive", "condRangeNarrow", "condValueSum", "condPathNarrow", "condLifecyclePair", "condLifecyclePairXPkgCallee", "condLifecyclePairXPkgCaller", "closableGeneric", "closableStdHandle", "closableSuppress", "closableDeferredBorrow", "closableBufioWriter", "condCallerDeadGuard", "condCallerSafetyViolation", "condCallerNegativeForm", "condCallerGeneralCmp", "condUnresolvedRuleRef", "condTupleTypedElement", "condTupleXPkgPayload", "condTupleXPkgType")
 }
 
 // TestAnalyzerWrappedReturn drives the fifth vow:emit destination
@@ -41,6 +41,29 @@ func TestAnalyzerWrappedReturn(t *testing.T) {
 // exist.
 func TestAnalyzerLoadedPresets(t *testing.T) {
 	analysistest.Run(t, analysistest.TestData(), Analyzer, "presetConcept", "presetReplacesBuiltin", "presetAddsBesideBuiltin", "presetWrappedReturn", "presetMissing")
+}
+
+// TestAnalyzerCrossPackageSubjectPerPreset runs a second must-consume
+// preset, keyed on its own marker, beside the built-in ones. A var
+// another package declares joins only the subject set of the preset
+// whose marker it carries, so each cross-package leak is reported
+// once, under that preset's name.
+func TestAnalyzerCrossPackageSubjectPerPreset(t *testing.T) {
+	retry, err := dsl.Parse([]byte(`name: retry
+version: "0.1"
+description: A must-consume preset keyed on a marker of its own.
+subjects:
+  - match: "annotation:vow:define @Retry"
+obligations:
+  - type: must-consume
+    detail:
+      consumers:
+        - errors.Is
+severity: warning
+`))
+	assert.MustNoError(t, "parse the retry preset", err)
+	analyzer := New(append(builtinPresets(), retry), nil)
+	analysistest.Run(t, analysistest.TestData(), analyzer, "sentinelsPresetXPkgCallee", "sentinelsPresetXPkgCaller")
 }
 
 // TestAnalyzerClosableConfigOptOut drives the per-directory

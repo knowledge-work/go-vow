@@ -49,7 +49,7 @@ func New(presets []*dsl.Preset, override *config.Config) *analysis.Analyzer {
 		Doc:       "vow lints value-level obligations declared in DSL presets (sentinel-error consumption, nil narrowing, exclusive return, ...).",
 		Requires:  []*analysis.Analyzer{inspect.Analyzer, buildssa.Analyzer},
 		Run:       runFunc(presets, resolver, override),
-		FactTypes: []analysis.Fact{(*signatureNilFact)(nil), (*fieldNilFact)(nil), (*conditionLogicalFact)(nil)},
+		FactTypes: []analysis.Fact{(*signatureNilFact)(nil), (*fieldNilFact)(nil), (*conditionLogicalFact)(nil), (*subjectFact)(nil)},
 	}
 }
 
@@ -83,6 +83,9 @@ func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Con
 		// nilDeclSet builds idempotently on first access.
 		exportSignatureNilFacts(pass, state)
 		exportFieldNilFacts(pass, state)
+		// Export a subjectFact on each exported subject var so a
+		// package that refers to the var checks its references too.
+		exportSubjectFacts(pass, presets)
 		// Report a vow:nil field marker sitting where the decl
 		// collection never reads it — a field of an anonymous struct
 		// type, or an embedded field. Such a marker exports no fact and

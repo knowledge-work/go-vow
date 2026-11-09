@@ -15,7 +15,7 @@ import (
 // sentinel declared in the package.
 //
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // LockHandle is a placeholder for a future @Resource concept. The
 // declaration is accepted but the analyzer notes that no behaviour

@@ -25,7 +25,7 @@ import "errors"
 // ErrFoo is the subject the vow:use and vow:emit fixtures name.
 //
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // CloseFn is the callback shape the higher-order fixtures hand
 // off. Each marker's subject (cb / handler / b) points at a

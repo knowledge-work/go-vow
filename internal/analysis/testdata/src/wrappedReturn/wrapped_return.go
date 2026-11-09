@@ -21,7 +21,7 @@ import (
 // through a registered wrap call.
 //
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // wrappedReturnSilent anchors a statement-scope vow:emit marker
 // to a return that calls wraplib.Wrap. The wrap call matches the

@@ -64,8 +64,10 @@ func Lookup(id *string) (*Record, error) {
 The `vow:emit ErrNotFound` marker authorises `Lookup` to hand the
 named sentinel back; without it, `return nil, ErrNotFound` is
 reported as a leak. The check reads references to the sentinel —
-every place `ErrNotFound` is itself named. A reference in a
-conditional position discharges the obligation, whether the branch
+every place `ErrNotFound` is itself named, including
+`store.ErrNotFound` in a package that imports `store`; markers there
+name it the way the reference does (`vow:emit store.ErrNotFound`).
+A reference in a conditional position discharges the obligation, whether the branch
 matches it with `errors.Is` / `errors.As`, compares it directly, or
 lists it as a `switch` case; a reference anywhere else is reported,
 including an `errors.Is` call whose result is returned instead of

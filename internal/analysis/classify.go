@@ -25,11 +25,12 @@ const (
 )
 
 // classifyReference assigns a class to a subject reference based on
-// the AST stack from the file root (index 0) down to the Ident itself
-// (last index). observerNames lists the qualified function names that
+// the AST stack from the file root (index 0) down to the reference
+// itself — an identifier, or a qualified identifier (`pkg.ErrFoo`) — at
+// the last index. observerNames lists the qualified function names that
 // can discharge the obligation when invoked inside a conditional;
-// subjectName is the simple identifier name of the referenced subject
-// (used to consult a direct sum declared via vow:cond).
+// subjectName is the subject's name as the reference spells it (used
+// to consult a direct sum declared via vow:cond).
 //
 // Classification is ordered: observation (discharges the obligation
 // in-place) is preferred over chain (which only postpones the
