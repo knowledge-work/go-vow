@@ -179,6 +179,9 @@ func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Con
 		// checks that the subject is function-typed so emission
 		// has a callable carrier to propagate through.
 		validateSubjectScopedLogicalConds(pass, state)
+		// The unscoped vow:cond gets the same operand check
+		// against the function's own signature.
+		validateLogicalCondReferences(pass, state)
 		validateSubjectScopedEmits(pass, state)
 		// Subject-scoped vow:nil contracts route through a
 		// callback signature rather than the enclosing function;
