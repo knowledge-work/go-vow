@@ -12,6 +12,7 @@ import (
 	"golang.org/x/tools/go/ast/inspector"
 
 	"github.com/knowledge-work/go-vow/internal/dsl"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // closableTypeSet returns the set of qualified type-name strings the
@@ -286,14 +287,29 @@ func collectClosableAcquisitions(pass *analysis.Pass, fn *ast.FuncDecl, closable
 	return out
 }
 
-// collectDeferredCloseReceivers walks fn.Body for `defer X.Close()`
-// statements and returns the set of receiver identifier names. The
-// match is intentionally narrow: only a selector-style call against
-// a bare identifier counts. Aliasing chains, method values, and
-// deferred wrappers are not covered by this walk.
+// collectDeferredCloseReceivers returns the names of the identifiers
+// deferredCloseReceivers finds in fn, including the defers inside
+// function literals, so a function literal such as a goroutine that
+// closes the value discharges it.
 func collectDeferredCloseReceivers(fn *ast.FuncDecl) map[string]struct{} {
-	out := map[string]struct{}{}
+	return seq.ChainOf(deferredCloseReceivers(fn, true)...).ToSet(func(recv *ast.Ident) string {
+		return recv.Name
+	})
+}
+
+// deferredCloseReceivers walks fn.Body for `defer X.Close()`
+// statements and returns each receiver identifier. The match is
+// intentionally narrow: only a selector-style call against a bare
+// identifier counts. Aliasing chains, method values, and deferred
+// wrappers are not covered by this walk. When intoFuncLits is false
+// the walk does not enter function literals, so it finds only the
+// defers in fn's own body. A defer inside a branch still counts.
+func deferredCloseReceivers(fn *ast.FuncDecl, intoFuncLits bool) []*ast.Ident {
+	var out []*ast.Ident
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		if _, isFuncLit := n.(*ast.FuncLit); isFuncLit {
+			return intoFuncLits
+		}
 		def, ok := n.(*ast.DeferStmt)
 		if !ok {
 			return true
@@ -306,7 +322,7 @@ func collectDeferredCloseReceivers(fn *ast.FuncDecl) map[string]struct{} {
 		if !ok {
 			return true
 		}
-		out[recv.Name] = struct{}{}
+		out = append(out, recv)
 		return true
 	})
 	return out
@@ -393,17 +409,78 @@ func checkUpcastInvariant(pass *analysis.Pass, fn *ast.FuncDecl, closables map[s
 	if fn.Type == nil {
 		return
 	}
+	reassigned := reassignedVariables(pass, fn)
+	closedHere := seq.ChainOf(deferredCloseReceivers(fn, false)...).
+		Map(func(recv *ast.Ident) types.Object {
+			return pass.TypesInfo.Uses[recv]
+		}).
+		Filter(func(obj types.Object) bool {
+			_, ok := reassigned[obj]
+			return isFunctionLocal(obj) && !ok
+		}).
+		ToSet(func(obj types.Object) types.Object {
+			return obj
+		})
 	ast.Inspect(fn.Body, func(n ast.Node) bool {
 		switch v := n.(type) {
 		case *ast.ReturnStmt:
 			checkUpcastReturn(pass, fn, v, closables)
 		case *ast.CallExpr:
-			checkUpcastCallArgs(pass, v, closables)
+			checkUpcastCallArgs(pass, v, closables, closedHere)
 		case *ast.AssignStmt:
 			checkUpcastAssign(pass, v, closables)
 		}
 		return true
 	})
+}
+
+// isFunctionLocal reports whether obj is declared inside a function.
+// A package-level variable can be replaced by any other function, so
+// its deferred Close may not reach the value a later call receives.
+func isFunctionLocal(obj types.Object) bool {
+	return obj != nil && obj.Pkg() != nil && obj.Parent() != obj.Pkg().Scope()
+}
+
+// reassignedVariables returns the variables fn may give a new value
+// anywhere in its body, function literals included: the targets of
+// `=`, the names `:=` redeclares, the variables of a `for ... = range`,
+// and the variables whose address fn takes. A deferred Close evaluates
+// its receiver when the defer statement runs, so a value the variable
+// receives after that is not the one it closes; the check does not
+// order the two and drops the variable either way.
+func reassignedVariables(pass *analysis.Pass, fn *ast.FuncDecl) map[types.Object]struct{} {
+	var targets []ast.Expr
+	ast.Inspect(fn.Body, func(n ast.Node) bool {
+		switch v := n.(type) {
+		case *ast.AssignStmt:
+			if v.Tok == token.ASSIGN || v.Tok == token.DEFINE {
+				targets = append(targets, v.Lhs...)
+			}
+		case *ast.RangeStmt:
+			if v.Tok == token.ASSIGN {
+				targets = append(targets, v.Key, v.Value)
+			}
+		case *ast.UnaryExpr:
+			if v.Op == token.AND {
+				targets = append(targets, v.X)
+			}
+		}
+		return true
+	})
+	return seq.ChainOf(targets...).
+		FilterMap(func(target ast.Expr) (types.Object, bool) {
+			ident, ok := ast.Unparen(target).(*ast.Ident)
+			if !ok {
+				return nil, false
+			}
+			// A `:=` records the names it redeclares in Uses and the
+			// names it declares in Defs, so only the former land here.
+			obj := pass.TypesInfo.Uses[ident]
+			return obj, obj != nil
+		}).
+		ToSet(func(obj types.Object) types.Object {
+			return obj
+		})
 }
 
 // checkUpcastReturn reports an upcast at every return whose result
@@ -432,8 +509,11 @@ func checkUpcastReturn(pass *analysis.Pass, fn *ast.FuncDecl, ret *ast.ReturnStm
 // whose value is Closable but whose declared parameter type is a
 // non-Closable interface. Variadic parameters share the parameter
 // type across the trailing arguments, so each variadic position is
-// checked against the same declared type.
-func checkUpcastCallArgs(pass *analysis.Pass, call *ast.CallExpr, closables map[string]struct{}) {
+// checked against the same declared type. An argument naming a
+// variable in closedHere is skipped: the function closes it with a
+// deferred Close, and a call argument is taken as borrowed for the
+// duration of the call.
+func checkUpcastCallArgs(pass *analysis.Pass, call *ast.CallExpr, closables map[string]struct{}, closedHere map[types.Object]struct{}) {
 	calleeType := pass.TypesInfo.TypeOf(call.Fun)
 	sig, ok := unwrapSignature(calleeType)
 	if !ok {
@@ -444,11 +524,25 @@ func checkUpcastCallArgs(pass *analysis.Pass, call *ast.CallExpr, closables map[
 		if paramType == nil {
 			continue
 		}
+		if isClosedHere(pass, arg, closedHere) {
+			continue
+		}
 		argType := pass.TypesInfo.TypeOf(arg)
 		if upcastDropsObligation(pass, paramType, argType, arg, closables) {
 			vowReportClosablef(pass, arg.Pos(), "vow[closable]: passing a Closable value as %s drops the close obligation; the parameter type must also be a Closable interface", typeDisplay(paramType))
 		}
 	}
+}
+
+// isClosedHere reports whether expr is an identifier naming a
+// variable in closedHere.
+func isClosedHere(pass *analysis.Pass, expr ast.Expr, closedHere map[types.Object]struct{}) bool {
+	ident, ok := ast.Unparen(expr).(*ast.Ident)
+	if !ok {
+		return false
+	}
+	_, ok = closedHere[pass.TypesInfo.Uses[ident]]
+	return ok
 }
 
 // checkUpcastAssign reports an upcast at every short-variable

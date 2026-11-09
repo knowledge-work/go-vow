@@ -419,7 +419,12 @@ acquisition to discharge. The pipeline runs in three steps:
    without a recognised discharge. `checkUpcastInvariant` runs in
    the same walk and reports the three upcast sites (return
    statement, call argument, assignment LHS) where a Closable
-   value flows into a non-Closable interface.
+   value flows into a non-Closable interface. A call argument
+   naming a local variable the function closes with its own
+   deferred Close, and never reassigns or takes the address of, is
+   taken as borrowed and skipped.
+   Unlike the discharge above, this exemption ignores a deferred
+   Close inside a function literal.
 
 `isClosableType` resolves the type-axis match across four shapes:
 the fully-qualified type string, a single pointer indirection, the

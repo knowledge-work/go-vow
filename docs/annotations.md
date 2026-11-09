@@ -73,6 +73,8 @@ Built-in Closable types ship through the `closable` preset's
 `built_in_closables` list (`*os.File`, `*net.TCPConn`,
 `*bufio.Writer`, `io.Closer`) so standard-library values flow
 through the same lifecycle check without a user-side annotation.
+A generic type parameter counts as Closable when its constraint
+names or embeds a Closable interface.
 
 Upcast invariant:
 
@@ -83,12 +85,17 @@ cannot vanish behind a wider type. Declare the destination type as
 a Closable interface (carrying its own `vow:define @Closable`
 marker) or hand the value off explicitly with `vow:emit`.
 
+A call argument does not report when it names a local variable
+that the function's own body closes with `defer x.Close()` and
+never reassigns or takes the address of: the call is taken as
+borrowing the value. For this
+exemption, a deferred Close inside a function literal does not
+count.
+
 The recogniser is intentionally aggressive: an ambiguous site
-reports, and a site that must stand carries a `vow:suppress`
-marker, which drops the acquisition and upcast diagnostics the
-same way it drops must-consume ones. A generic type parameter
-counts as Closable when its constraint names or embeds a Closable
-interface.
+reports. Where the code cannot be changed to avoid a report, a
+`vow:suppress` marker drops the acquisition and upcast diagnostics
+the same way it drops must-consume ones.
 
 ## `vow:cond`
 
@@ -1017,16 +1024,17 @@ func dropsLeak() error {
 Behaviour:
 
 - The marker affects must-consume, nil-safety, `nil-decl`,
-  `vow:readonly`, and Closable acquisition and upcast diagnostics;
-  other diagnostic classes (return-position mismatch, parser
-  errors, concept-system info diagnostics) flow through untouched.
+  `vow:readonly` write-after-escape, and Closable acquisition and
+  upcast diagnostics; other diagnostic classes (return-position
+  mismatch, parser errors, diagnostics about a `vow:emit` marker
+  itself, concept-system info diagnostics) flow through untouched.
 - Two scopes: a function-doc occurrence silences every such
   diagnostic inside the function; a line comment (trailing or
   leading the statement, mirroring `//nolint`) silences the
   statement on that line. A trailing comment wins over a leading
   comment on the next line when both could anchor.
 - Bare `vow:suppress` and `vow:suppress:` (empty reason) are
-  diagnosed at parser time; the analyzer refuses to silence a leak
+  diagnosed at parser time; the analyzer refuses to silence a diagnostic
   without a reason because the surface is for debt tracking, not
   assertion.
 
