@@ -69,6 +69,17 @@ var ErrTwoSpaces = errors.New("two spaces") // want ErrTwoSpaces:"subject\\(vow:
 
 func LeakTwoSpaces() error { return ErrTwoSpaces } // want `sentinel error ErrTwoSpaces leaked`
 
+// A tab reads as a space after vow:define, both for a Sentinel and for
+// a concept with no behaviour registered.
+//
+// vow:define	@Sentinel
+var ErrTab = errors.New("tab") // want ErrTab:"subject\\(vow:define @Sentinel\\)"
+
+func LeakTab() error { return ErrTab } // want `sentinel error ErrTab leaked`
+
+// vow:define	@Custom
+var customTab = 0 // want `vow\[concept\]: vow:define @Custom: concept declared but no behavior registered`
+
 // A tab after vow:import is not read, so it is reported.
 //
 // vow:import	result "preset/std/result" // want `vow\[annotation\]: vow:import followed by '\\t' is not read as the marker`

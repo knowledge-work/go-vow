@@ -127,10 +127,11 @@ func emitFromDoc(pass *analysis.Pass, gd *ast.GenDecl, doc *ast.CommentGroup, re
 // `vow:define <Concept> <option>=...` syntax can be added without
 // retrofitting this matcher.
 func parseConceptDefineLine(line string) (string, bool) {
-	if !strings.HasPrefix(line, conceptDefineMarker+" ") {
+	rest, ok := stripMarkerPrefix(line, conceptDefineMarker)
+	if !ok {
 		return "", false
 	}
-	payload := strings.TrimSpace(line[len(conceptDefineMarker)+1:])
+	payload := strings.TrimSpace(rest)
 	if !strings.HasPrefix(payload, "@") {
 		return "", false
 	}
