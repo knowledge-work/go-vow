@@ -5,6 +5,8 @@ import (
 	"strings"
 
 	"golang.org/x/tools/go/analysis"
+
+	"github.com/knowledge-work/go-vow/internal/dsl"
 )
 
 // validateCondAnnotationResolution reports a vow:cond line that
@@ -31,11 +33,13 @@ func validateCondAnnotationResolution(pass *analysis.Pass, state *passState) {
 			}
 			for _, c := range fn.Doc.List {
 				line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
-				marker, subject, payload, ok := splitDocMarker(line)
+				// splitDocMarker skips a marker with no payload, which
+				// is a line that does not parse, so match it here.
+				chain, payload, ok := stripMarkerScopeChain(line, rulesMarker)
 				if !ok {
 					continue
 				}
-				_, err := parsePayloadByMarker(marker, payload, scope)
+				_, err := parsePayloadByMarker(rulesMarker, payload, scope)
 				if err == nil {
 					continue
 				}
@@ -43,8 +47,8 @@ func validateCondAnnotationResolution(pass *analysis.Pass, state *passState) {
 					pass,
 					fn.Pos(),
 					"vow[sentinel-error]: %s%s payload %q was not applied: %v",
-					marker,
-					formatSubjectChain(subject),
+					rulesMarker,
+					formatSubjectChain(dsl.SubjectChain(chain)),
 					payload,
 					err,
 				)

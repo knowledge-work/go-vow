@@ -157,9 +157,6 @@ func collectInterfaceMethodNilSignature(pass *analysis.Pass, field *ast.Field, f
 			vowReportNilSafetyf(pass, field.Pos(), "vow[nil-safety]: %s: subject-scoped markers are not supported on interface methods", nilDeclMarker)
 			continue
 		}
-		if payload == "" {
-			continue
-		}
 		parsed, err := dsl.ParseNilSignature(payload)
 		if err != nil {
 			vowReportNilSafetyf(pass, field.Pos(), "vow[nil-safety]: %s: %v", nilDeclMarker, err)
@@ -239,9 +236,6 @@ func collectNilSignature(pass *analysis.Pass, fn *ast.FuncDecl) (*dsl.NilSignatu
 		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
 		chain, payload, ok := stripMarkerScopeChain(line, nilDeclMarker)
 		if !ok {
-			continue
-		}
-		if payload == "" {
 			continue
 		}
 		parsed, err := dsl.ParseNilSignature(payload)

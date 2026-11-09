@@ -23,6 +23,18 @@ func NoSpaceAfterSlashes(t *T) int { return t.V } // want NoSpaceAfterSlashes:"n
 // vow:nill (!) // want `vow\[annotation\]: vow:nill is not a marker the analyzer reads; the markers are vow:cond, vow:define, vow:discharged, vow:emit, vow:import, vow:nil, vow:readonly, vow:suppress, vow:use`
 func Misspelt(t *T) int { return t.V }
 
+// BareNil carries the marker with no payload, which its parser
+// rejects as it does on a struct field.
+//
+// vow:nil
+func BareNil(t *T) int { return t.V } // want `vow\[nil-safety\]: vow:nil: vow:nil payload is empty`
+
+// BareNilOnMethod is the interface-method form of the same.
+type BareNilOnMethod interface {
+	// vow:nil
+	Do(t *T) // want `vow\[nil-safety\]: vow:nil: vow:nil payload is empty`
+}
+
 // vow:foo (!) // want `vow\[annotation\]: vow:foo is not a marker the analyzer reads`
 func Unknown(t *T) int { return t.V }
 

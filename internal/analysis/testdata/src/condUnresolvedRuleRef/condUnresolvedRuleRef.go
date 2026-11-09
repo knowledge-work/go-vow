@@ -80,3 +80,10 @@ func positionalOperand(foo *Foo) error { // want `vow\[sentinel-error\]: vow:con
 func identifierOperand(foo *Foo) error { // want `vow\[sentinel-error\]: vow:cond payload "nosuchident != nil -> nil" was not applied: .*: syntax error`
 	return nil
 }
+
+// bareMarker carries the marker with no payload.
+//
+// vow:cond
+func bareMarker() error { // want `vow\[sentinel-error\]: vow:cond payload "" was not applied: .*empty payload`
+	return nil
+}
