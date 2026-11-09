@@ -44,6 +44,14 @@ const categoryNilSafety = "nil-safety"
 // because go/analysis carries no severity axis.
 const categoryNilDecl = "nil-decl"
 
+// categoryClosable tags the Closable acquisition and upcast
+// diagnostics so vow:suppress can drop them. The diagnostics about
+// the vow:emit marker itself (a missing subject, a placement the
+// analyzer cannot resolve) share the `vow[closable]` label but not
+// this category, so a marker that silences a leak still lets them
+// surface.
+const categoryClosable = "closable"
+
 // suppressLineKey identifies a source line for line-level suppression.
 // Filename plus line number is the smallest pair that uniquely
 // identifies a source line across the per-pass FileSet without
@@ -264,12 +272,11 @@ func enclosingFuncDeclAt(file *ast.File, pos token.Pos) *ast.FuncDecl {
 }
 
 // shouldSuppressBySuppress reports whether the diagnostic should be
-// dropped by the vow:suppress filter. Two diagnostic categories are
-// eligible: must-consume (the original "I read the leak" valve) and
-// nil-safety (caller-side argument and receiver nil checks). Other
-// categories — condition-shape, annotation-arity, parser errors —
-// flow through untouched so an author who suppresses a leak still
-// sees typos or return-position violations in the same function.
+// dropped by the vow:suppress filter. The eligible categories are the
+// ones isSuppressibleCategory lists. Other categories —
+// condition-shape, annotation-arity, parser errors — flow through
+// untouched so an author who suppresses a leak still sees typos or
+// return-position violations in the same function.
 func shouldSuppressBySuppress(pass *analysis.Pass, state *passState, diag analysis.Diagnostic) bool {
 	if !isSuppressibleCategory(diag.Category) {
 		return false
@@ -290,5 +297,5 @@ func isSuppressibleCategory(cat string) bool {
 	if isMustConsumeCategory(cat) {
 		return true
 	}
-	return cat == categoryNilSafety || cat == categoryNilDecl
+	return cat == categoryNilSafety || cat == categoryNilDecl || cat == categoryClosable
 }

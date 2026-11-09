@@ -171,6 +171,18 @@ func vowReportNilDeclf(pass *analysis.Pass, pos token.Pos, format string, args .
 	})
 }
 
+// vowReportClosablef is the Closable variant of vowReportf.
+// Diagnostics emitted here carry the closable category so that a
+// `vow:suppress` marker can drop an acquisition or upcast report the
+// code cannot be changed to avoid.
+func vowReportClosablef(pass *analysis.Pass, pos token.Pos, format string, args ...any) {
+	vowReport(pass, analysis.Diagnostic{
+		Pos:      pos,
+		Category: categoryClosable,
+		Message:  fmt.Sprintf(format, args...),
+	})
+}
+
 // vowReportMustConsumef is the must-consume variant of vowReportf.
 // Diagnostics emitted here carry a must-consume tag in Category so
 // the suppress filter can identify and drop them; the same Category

@@ -236,7 +236,7 @@ func checkClosableAcquisitions(pass *analysis.Pass, fn *ast.FuncDecl, closables 
 		if _, ok := emitted[acq.name]; ok {
 			continue
 		}
-		vowReportf(
+		vowReportClosablef(
 			pass,
 			acq.pos,
 			"vow[closable]: %s is acquired but not closed; add a defer Close call or declare the transfer with vow:emit",
@@ -387,12 +387,8 @@ func typeParamConstraintIsClosable(typeParam *types.TypeParam, closables map[str
 // resolves to a Closable value. Reads of the os package's
 // process-owned handles are exempt at all three. The recogniser
 // stays aggressive per the project's detection policy: any
-// remaining ambiguity reports. These diagnostics carry no category,
-// so the vow:suppress filter cannot drop them — a site that must
-// stand is changed in the code, or its type is taken out of
-// closable.built_in_closables. Where that list comes from a
-// --config-file / --config-yaml override the change is run-wide: an
-// override suppresses the per-directory vow.yaml walk.
+// remaining ambiguity reports, and a site the code cannot be changed
+// to avoid carries a vow:suppress marker.
 func checkUpcastInvariant(pass *analysis.Pass, fn *ast.FuncDecl, closables map[string]struct{}) {
 	if fn.Type == nil {
 		return
@@ -427,7 +423,7 @@ func checkUpcastReturn(pass *analysis.Pass, fn *ast.FuncDecl, ret *ast.ReturnStm
 		declType := pass.TypesInfo.TypeOf(declared[i])
 		exprType := pass.TypesInfo.TypeOf(expr)
 		if upcastDropsObligation(pass, declType, exprType, expr, closables) {
-			vowReportf(pass, expr.Pos(), "vow[closable]: returning a Closable value as %s drops the close obligation; declare the return type as a Closable interface or hand off explicitly", typeDisplay(declType))
+			vowReportClosablef(pass, expr.Pos(), "vow[closable]: returning a Closable value as %s drops the close obligation; declare the return type as a Closable interface or hand off explicitly", typeDisplay(declType))
 		}
 	}
 }
@@ -450,7 +446,7 @@ func checkUpcastCallArgs(pass *analysis.Pass, call *ast.CallExpr, closables map[
 		}
 		argType := pass.TypesInfo.TypeOf(arg)
 		if upcastDropsObligation(pass, paramType, argType, arg, closables) {
-			vowReportf(pass, arg.Pos(), "vow[closable]: passing a Closable value as %s drops the close obligation; the parameter type must also be a Closable interface", typeDisplay(paramType))
+			vowReportClosablef(pass, arg.Pos(), "vow[closable]: passing a Closable value as %s drops the close obligation; the parameter type must also be a Closable interface", typeDisplay(paramType))
 		}
 	}
 }
@@ -471,7 +467,7 @@ func checkUpcastAssign(pass *analysis.Pass, assign *ast.AssignStmt, closables ma
 		lhsType := pass.TypesInfo.TypeOf(lhs)
 		rhsType := pass.TypesInfo.TypeOf(assign.Rhs[i])
 		if upcastDropsObligation(pass, lhsType, rhsType, assign.Rhs[i], closables) {
-			vowReportf(pass, assign.Rhs[i].Pos(), "vow[closable]: assigning a Closable value to a %s drops the close obligation; the destination type must also be a Closable interface", typeDisplay(lhsType))
+			vowReportClosablef(pass, assign.Rhs[i].Pos(), "vow[closable]: assigning a Closable value to a %s drops the close obligation; the destination type must also be a Closable interface", typeDisplay(lhsType))
 		}
 	}
 }
