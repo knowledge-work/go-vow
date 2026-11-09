@@ -30,8 +30,7 @@ import "strings"
 //
 // The helper is used by every marker family that opts into the
 // single-subject scope grammar so the same `[subject]` lexer
-// behaviour applies uniformly to vow:use, vow:emit, vow:cond, and
-// vow:nil.
+// behaviour applies uniformly to vow:use, vow:emit, vow:cond, and vow:nil.
 func stripMarkerScope(line, marker string) (subject, payload string, ok bool) {
 	chain, payload, ok := stripMarkerScopeChain(line, marker)
 	if !ok {

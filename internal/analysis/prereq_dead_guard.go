@@ -14,8 +14,8 @@ import (
 // non-nil at entry. The prereq pre-establishes non-nil before
 // any body statement runs, so the guard's then-branch is
 // unreachable and almost always signals that the author meant
-// the looser `nil | nonnil x` shape. The recogniser stays
-// vow:cond-driven so the same check covers sentinel-
+// the looser `nil | nonnil x` shape. The recogniser stays driven
+// by vow:cond so the same check covers sentinel-
 // narrowing prereqs (where `nonnil err` is the common form for
 // pinning an error-narrowing branch) alongside any future
 // prereq-driven non-nil declaration that lands without going

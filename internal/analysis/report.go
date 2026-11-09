@@ -148,7 +148,7 @@ func vowReportf(pass *analysis.Pass, pos token.Pos, format string, args ...any) 
 
 // vowReportNilSafetyf is the nil-safety variant of vowReportf.
 // Diagnostics emitted here carry the nil-safety category tag so the
-// vow:suppress filter can identify and drop them. The surface is
+// filter behind vow:suppress can identify and drop them. The surface is
 // the caller-side argument and receiver nil checks; non-nil-safety
 // emissions continue to flow through vowReportf unchanged.
 func vowReportNilSafetyf(pass *analysis.Pass, pos token.Pos, format string, args ...any) {

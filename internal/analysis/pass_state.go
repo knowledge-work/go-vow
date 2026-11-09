@@ -106,7 +106,7 @@ func (s *passState) parentMap(file *ast.File) map[ast.Node]ast.Node {
 }
 
 // markFunctionSuppressed registers fn's AST range as a function-level
-// vow:suppress site. Every must-consume diagnostic whose position
+// site of a vow:suppress marker. Every must-consume diagnostic whose position
 // lies inside the range is dropped at vowReport time. The range
 // includes fn.Doc deliberately omitted: doc-position diagnostics do
 // not exist for must-consume, and excluding the doc keeps the range

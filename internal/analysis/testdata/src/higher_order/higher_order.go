@@ -1,7 +1,7 @@
 // Package higher_order is the analysistest fixture for the
-// [subject] scope qualifier that every marker family — vow:nil,
-// vow:cond, vow:use, vow:emit — accepts on the function-doc
-// surface. The qualifier retargets the marker at a signature-scope
+// [subject] scope qualifier that every marker family accepts on the
+// function-doc surface: vow:nil, vow:cond, vow:use, and vow:emit.
+// The qualifier retargets the marker at a signature-scope
 // identifier (a receiver, a regular parameter, or a named return)
 // so the same declaration grammar describes a higher-order
 // contract carried by a callback parameter or by a return value.

@@ -2,8 +2,8 @@
 // cross-package must-consume check. sentinelsXPkgCallee exports a fact
 // on each var it marks with vow:define @Sentinel, so a reference here is
 // classified the same way a reference in the declaring package is. The
-// subject is named the way the reference spells it, and vow:emit,
-// vow:cond, and vow:use in this package list it under that name.
+// subject is named the way the reference spells it, and vow:emit, vow:cond,
+// and vow:use in this package list it under that name.
 package sentinelsXPkgCaller
 
 import (
