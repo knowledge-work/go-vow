@@ -66,6 +66,26 @@ severity: warning
 	analysistest.Run(t, analysistest.TestData(), analyzer, "sentinelsPresetXPkgCallee", "sentinelsPresetXPkgCaller")
 }
 
+// TestAnalyzerMarkerShapePreset loads a preset whose subject selects
+// on its own marker, so the malformed-marker check treats that marker
+// as known.
+func TestAnalyzerMarkerShapePreset(t *testing.T) {
+	preset, err := dsl.Parse([]byte(`
+name: tracked
+version: "0.1"
+subjects:
+  - match: "annotation:vow:tracked"
+obligations:
+  - type: must-consume
+    detail:
+      consumers:
+        - errors.Is
+severity: warning
+`))
+	assert.MustNoError(t, "parse the tracked preset", err)
+	analysistest.Run(t, analysistest.TestData(), New([]*dsl.Preset{preset}, nil), "markerShapePreset")
+}
+
 // TestAnalyzerClosableConfigOptOut drives the per-directory
 // `vow.yaml` config: the closableConfigOptOut fixture ships its
 // own vow.yaml whose `closable.built_in_closables` is the empty

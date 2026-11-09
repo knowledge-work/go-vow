@@ -5,11 +5,13 @@ import (
 	"go/ast"
 	"go/token"
 	"iter"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
 	"golang.org/x/tools/go/analysis"
 
+	"github.com/knowledge-work/go-vow/internal/dsl"
 	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
@@ -36,7 +38,8 @@ const (
 	hintNoPayload    = "the marker takes no payload"
 )
 
-// markerShapes lists every marker the analyzer reads.
+// markerShapes lists every marker the analyzer itself reads; a preset
+// adds the markers its subjects select on (see presetMarkerShapes).
 var markerShapes = []markerShape{
 	{marker: rulesMarker, separators: " \t[", hint: hintPayloadSpace},
 	{marker: conceptDefineMarker, separators: " \t", groupText: true, hint: hintPayloadSpace},
@@ -62,25 +65,42 @@ const (
 )
 
 // reportMalformedMarkers reports every comment line that starts with
-// vow: but that no marker reader picks up: an unknown marker name, a
-// known name followed by a byte its reader does not accept, or a
-// comment form its reader skips. Each reader ignores such a line, so
-// without this the author would hold a contract that reads as
-// enforced while nothing checks it.
-func reportMalformedMarkers(pass *analysis.Pass) {
-	for _, file := range pass.Files {
-		for _, group := range file.Comments {
-			for _, c := range group.List {
-				reportMalformedMarkersIn(pass, c)
-			}
-		}
-	}
+// vow: in a shape no marker reader accepts: an unknown marker name, a
+// known name followed by a character its reader does not accept, a
+// malformed [subject] scope, or a comment form its reader skips. Each
+// reader ignores such a line, so without this the author would hold a
+// contract that reads as enforced while nothing checks it.
+func reportMalformedMarkers(pass *analysis.Pass, state *passState) {
+	shapes := append(slices.Clone(markerShapes), presetMarkerShapes(state.presets)...)
+	seq.ChainOf(pass.Files...).
+		FlatMap(func(file *ast.File) iter.Seq[*ast.CommentGroup] { return slices.Values(file.Comments) }).
+		FlatMap(func(group *ast.CommentGroup) iter.Seq[*ast.Comment] { return slices.Values(group.List) }).
+		Each(func(c *ast.Comment) { reportMalformedMarkersIn(pass, shapes, c) })
+}
+
+// presetMarkerShapes returns a shape for each marker a preset subject
+// selects on (`match: "annotation:vow:<marker> ..."`) that
+// markerShapes does not list. The subject reader goes through
+// CommentGroup.Text and treats a run of spaces or tabs as one space.
+func presetMarkerShapes(presets []*dsl.Preset) []markerShape {
+	return seq.ChainOf(presets...).
+		FlatMap(func(p *dsl.Preset) iter.Seq[string] { return slices.Values(annotationMarkers(p)) }).
+		Map(func(m string) string { name, _, _ := strings.Cut(m, " "); return name }).
+		Filter(func(name string) bool {
+			return strings.HasPrefix(name, markerPrefix) &&
+				!slices.ContainsFunc(markerShapes, func(s markerShape) bool { return s.marker == name })
+		}).
+		UniqFunc(func(name string) string { return name }).
+		Map(func(name string) markerShape {
+			return markerShape{marker: name, separators: " \t", groupText: true, hint: hintPayloadSpace}
+		}).
+		ToSlice()
 }
 
 // reportMalformedMarkersIn checks each line of c that starts with
-// vow:. The diagnostic anchors at the marker itself so a multi-line
-// /* */ comment points at the offending line.
-func reportMalformedMarkersIn(pass *analysis.Pass, c *ast.Comment) {
+// vow: against shapes. The diagnostic anchors at the marker itself so
+// a multi-line /* */ comment points at the offending line.
+func reportMalformedMarkersIn(pass *analysis.Pass, shapes []markerShape, c *ast.Comment) {
 	block := strings.HasPrefix(c.Text, "/*")
 	for at := range markerLineStarts(c.Text) {
 		line, _, _ := strings.Cut(c.Text[at:], "\n")
@@ -92,7 +112,7 @@ func reportMalformedMarkersIn(pass *analysis.Pass, c *ast.Comment) {
 		case at == len("//"):
 			form = directiveComment
 		}
-		if message, ok := malformedMarkerMessage(strings.TrimSpace(line), form); ok {
+		if message, ok := malformedMarkerMessage(shapes, strings.TrimSpace(line), form); ok {
 			vowReportf(pass, c.Pos()+token.Pos(at), "vow[annotation]: %s", message)
 		}
 	}
@@ -121,10 +141,10 @@ func markerLineStarts(text string) iter.Seq[int] {
 }
 
 // malformedMarkerMessage returns what is wrong with line, a trimmed
-// comment line that starts with vow:, or ok=false when a reader
-// accepts it. A line whose vow: is not followed by a letter is prose
-// rather than a marker and stays silent.
-func malformedMarkerMessage(line string, form commentForm) (message string, ok bool) {
+// comment line that starts with vow:, or ok=false when the reader of
+// its shape accepts it. A line whose vow: is not followed by a letter
+// is prose rather than a marker and stays silent.
+func malformedMarkerMessage(shapes []markerShape, line string, form commentForm) (message string, ok bool) {
 	rest := line[len(markerPrefix):]
 	nameLen := strings.IndexFunc(rest, func(r rune) bool {
 		return (r < 'a' || r > 'z') && (r < 'A' || r > 'Z')
@@ -136,9 +156,9 @@ func malformedMarkerMessage(line string, form commentForm) (message string, ok b
 		return "", false
 	}
 	marker := markerPrefix + rest[:nameLen]
-	shape, known := seq.ChainOf(markerShapes...).Find(func(s markerShape) bool { return s.marker == marker })
+	shape, known := seq.ChainOf(shapes...).Find(func(s markerShape) bool { return s.marker == marker })
 	if !known {
-		names := seq.ChainOf(markerShapes...).Map(func(s markerShape) string { return s.marker }).ToSlice()
+		names := seq.ChainOf(shapes...).Map(func(s markerShape) string { return s.marker }).ToSlice()
 		return fmt.Sprintf("%s is not a marker the analyzer reads; the markers are %s", marker, strings.Join(names, ", ")), true
 	}
 	switch {
@@ -152,8 +172,11 @@ func malformedMarkerMessage(line string, form commentForm) (message string, ok b
 		return "", false
 	}
 	next, _ := utf8.DecodeRuneInString(after)
-	if strings.ContainsRune(shape.separators, next) {
-		return "", false
+	if !strings.ContainsRune(shape.separators, next) {
+		return fmt.Sprintf("%s followed by %q is not read as the marker; %s", marker, next, shape.hint), true
 	}
-	return fmt.Sprintf("%s followed by %q is not read as the marker; %s", marker, next, shape.hint), true
+	if _, _, ok := stripMarkerScopeChain(line, marker); next == '[' && !ok {
+		return fmt.Sprintf("%s has a malformed [subject] scope; write %s[name] with a non-empty name and a closing ]", marker, marker), true
+	}
+	return "", false
 }

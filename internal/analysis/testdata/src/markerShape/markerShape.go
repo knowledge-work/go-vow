@@ -41,6 +41,12 @@ func Unknown(t *T) int { return t.V }
 // vow:nil(!) // want `vow\[annotation\]: vow:nil followed by '\(' is not read as the marker; put a space between the marker and its payload`
 func NoSpaceBeforePayload(t *T) int { return t.V }
 
+// vow:cond[ * -> nil // want `vow.annotation.: vow:cond has a malformed .subject. scope; write vow:cond.name. with a non-empty name and a closing .`
+func OpenScope() error { return nil }
+
+// vow:nil[] (!) // want `vow.annotation.: vow:nil has a malformed .subject. scope`
+func EmptyScope(t *T) int { return t.V }
+
 /* vow:nil (!) */    // want `vow\[annotation\]: vow:nil in a /\* \*/ comment is not read; write it in a // comment`
 func Block(t *T) int { return t.V }
 

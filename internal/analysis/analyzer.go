@@ -208,7 +208,7 @@ func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Con
 		reportLineLevelDischarged(pass)
 		// Report a comment line that starts with vow: but that no
 		// marker reader picks up, such as a misspelt marker name.
-		reportMalformedMarkers(pass)
+		reportMalformedMarkers(pass, state)
 		// Report any vow:use X function whose body lacks a
 		// discharge site for X. Each function is validated
 		// independently against the (a) direct-conditional and
