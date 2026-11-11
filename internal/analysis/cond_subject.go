@@ -10,8 +10,8 @@ import (
 	"github.com/knowledge-work/go-vow/internal/dsl"
 )
 
-// validateSubjectScopedLogicalConds walks every function-doc
-// vow:cond[subject] marker carrying a logical-arrow rule and
+// validateSubjectScopedLogicalConds walks every function-doc marker
+// of the form vow:cond[subject] carrying a logical-arrow rule and
 // validates that each Expression's reference resolves within the
 // callback subject's signature scope. The marker delegates the
 // rule's evaluation to the callback rather than to the enclosing
@@ -54,7 +54,7 @@ func validateSubjectScopedLogicalConds(pass *analysis.Pass, state *passState) {
 // then validates every logical-arrow rule's operands against that
 // signature scope. Chain failures (unresolved segment or
 // intermediate non-callback) are reported elsewhere — by the
-// vow:cond discovery walk that runs ahead of this validator — so
+// discovery walk of vow:cond that runs ahead of this validator — so
 // this helper silently returns when the chain does not resolve.
 // A successfully resolved chain whose innermost slot is not
 // callback-typed also returns silently because a layer-specific
@@ -71,37 +71,42 @@ func validateSubjectScopedCond(pass *analysis.Pass, fn *ast.FuncDecl, cond *dsl.
 		if r.Arrow.Direction == dsl.DirStructural {
 			continue
 		}
-		validateLogicalOperandInCallbackSig(pass, fn, cond.Subject, sig, r.Arrow.Left)
-		validateLogicalOperandInCallbackSig(pass, fn, cond.Subject, sig, r.Arrow.Right)
+		validateLogicalOperandInSig(pass, fn, cond.Subject, sig, r.Arrow.Left)
+		validateLogicalOperandInSig(pass, fn, cond.Subject, sig, r.Arrow.Right)
 	}
 }
 
-// validateLogicalOperandInCallbackSig reports when an operand's
-// reference does not name any slot in the innermost callback's
-// signature. Bare identifier references match against the
-// receiver, parameters, or named returns of the callback; `$N`
-// positional references match against the return list by index.
-// Postfix-chained references are not inspected at this layer and
-// stay silent because the callback's field structure is decided
-// by the type checker rather than by the rule's surface scope.
+// validateLogicalOperandInSig reports when an operand's reference
+// does not name any slot in sig: the innermost callback's signature
+// for a scoped marker, or the function's own for an unscoped one.
+// Bare identifier references match against the receiver,
+// parameters, or named returns; `$N` positional references match
+// against the return list by index. Postfix-chained references are
+// not inspected at this layer and stay silent because the field
+// structure is decided by the type checker rather than by the
+// rule's surface scope.
 //
 // The chain argument carries the full `[X][Y]...` qualifier so
 // the diagnostic quotes the qualifier the author wrote, letting
 // the reader trace which nesting level the offending operand
 // belongs to.
-func validateLogicalOperandInCallbackSig(pass *analysis.Pass, fn *ast.FuncDecl, chain dsl.SubjectChain, sig *types.Signature, expr *dsl.Expression) {
+func validateLogicalOperandInSig(pass *analysis.Pass, fn *ast.FuncDecl, chain dsl.SubjectChain, sig *types.Signature, expr *dsl.Expression) {
 	if expr == nil {
 		return
 	}
 	if len(expr.Ref.Path) > 0 {
 		return
 	}
+	sigName := "callback signature"
+	if len(chain) == 0 {
+		sigName = "function signature"
+	}
 	switch expr.Ref.Kind {
 	case dsl.RefIdent:
 		if !callbackSigHasIdentRef(sig, expr.Ref.Name) {
 			vowReportf(pass, fn.Pos(),
-				"vow[sentinel-error]: vow:cond%s references %q, which is not a parameter, receiver, or named return of the callback signature",
-				formatSubjectChain(chain), expr.Ref.Name)
+				"vow[sentinel-error]: vow:cond%s references %q, which is not a parameter, receiver, or named return of the %s",
+				formatSubjectChain(chain), expr.Ref.Name, sigName)
 		}
 	case dsl.RefDollar:
 		n, err := strconv.Atoi(expr.Ref.Name)
@@ -111,8 +116,8 @@ func validateLogicalOperandInCallbackSig(pass *analysis.Pass, fn *ast.FuncDecl, 
 		results := sig.Results()
 		if results == nil || n > results.Len() {
 			vowReportf(pass, fn.Pos(),
-				"vow[sentinel-error]: vow:cond%s references $%d but the callback signature has fewer return positions",
-				formatSubjectChain(chain), n)
+				"vow[sentinel-error]: vow:cond%s references $%d but the %s has fewer return positions",
+				formatSubjectChain(chain), n, sigName)
 		}
 	}
 }

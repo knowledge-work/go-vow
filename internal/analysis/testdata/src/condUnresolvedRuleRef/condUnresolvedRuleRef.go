@@ -23,12 +23,11 @@ func missingRule() (*Foo, error) { // want `vow\[sentinel-error\]: vow:cond payl
 }
 
 // proseMarker opens a doc line with the marker name, the shape
-// the authoring tip warns about. The line fails as a syntax
-// error rather than as a lookup, so it stays silent here and the
-// existing prose stance is unchanged.
+// the authoring tip warns about. The line fails as a syntax error
+// rather than as a lookup, and is reported all the same.
 //
 // vow:cond rules are what this comment happens to talk about
-func proseMarker() (*Foo, error) {
+func proseMarker() (*Foo, error) { // want `vow\[sentinel-error\]: vow:cond payload "rules are what this comment happens to talk about" was not applied: .*: invalid grammar`
 	return &Foo{}, nil
 }
 
@@ -41,8 +40,8 @@ func scopedMarker(cb func() *Foo) (*Foo, error) { // want `vow\[sentinel-error\]
 	return cb(), nil
 }
 
-// plainCondition carries a reference-free rule, which resolves
-// through the ordinary parser and must not reach this surface.
+// plainCondition carries a reference-free rule that parses, so it
+// stays silent.
 //
 // vow:cond foo != nil <=> err == nil
 func plainCondition() (foo *Foo, err error) {
@@ -51,10 +50,10 @@ func plainCondition() (foo *Foo, err error) {
 
 // proseWithReference opens with the marker and happens to carry an
 // `@` in the prose. The token is not a rule reference, so the line
-// fails as a syntax error and stays silent like any other prose.
+// fails as a syntax error like any other prose.
 //
 // vow:cond see @notes for the rationale
-func proseWithReference() (*Foo, error) {
+func proseWithReference() (*Foo, error) { // want `vow\[sentinel-error\]: vow:cond payload "see @notes for the rationale" was not applied: .*: invalid grammar`
 	return &Foo{}, nil
 }
 
@@ -65,4 +64,26 @@ func proseWithReference() (*Foo, error) {
 // vow:cond @Absent[*Foo, error]
 func localReference() (*Foo, error) { // want `vow\[sentinel-error\]: vow:cond payload "@Absent\[\*Foo, error\]" was not applied: rule "Absent" is not defined locally`
 	return &Foo{}, nil
+}
+
+// positionalOperand writes an expression where the structural arrow
+// expects a list of parameter positions, so the line does not parse.
+//
+// vow:cond $9 != nil -> nil
+func positionalOperand(foo *Foo) error { // want `vow\[sentinel-error\]: vow:cond payload "\$9 != nil -> nil" was not applied: .*: syntax error`
+	return nil
+}
+
+// identifierOperand is the same mistake with a bare identifier.
+//
+// vow:cond nosuchident != nil -> nil
+func identifierOperand(foo *Foo) error { // want `vow\[sentinel-error\]: vow:cond payload "nosuchident != nil -> nil" was not applied: .*: syntax error`
+	return nil
+}
+
+// bareMarker carries the marker with no payload.
+//
+// vow:cond
+func bareMarker() error { // want `vow\[sentinel-error\]: vow:cond payload "" was not applied: .*empty payload`
+	return nil
 }

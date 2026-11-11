@@ -14,7 +14,7 @@ import (
 )
 
 func TestAnalyzer(t *testing.T) {
-	analysistest.Run(t, analysistest.TestData(), Analyzer, "readonlyWrites", "sentinels", "sentinelsXPkgCallee", "sentinelsXPkgCaller", "composed", "import_unknown", "importPkgScope", "qualified_pkg", "qualified_consumer", "suppress", "discharged", "vowUse", "useHint", "concept", "vowEmit", "nilDeclBasic", "nilDeclKeywordForm", "nilDeclNest", "nilDeclNestArity", "nilDeclNestGenericNarrow", "nilDeclLayer", "nilDeclReassign", "nilDeclNarrow", "nilDeclFieldNarrow", "nilDeclFieldDeref", "nilDeclField", "nilDeclFieldAssign", "nilDeclFieldAssignFlow", "nilDeclCallResult", "nilDeclFieldConstruct", "nilDeclFieldConstructWhole", "nilDeclFieldReach", "nilDeclFieldGeneric", "nilDeclSelfBasic", "nilDeclCallerDeadGuard", "nilDeclSelfFlow", "nilDeclSelfNest", "nilDeclSelfRecv", "nilDeclReceiver", "nilDeclInterfaceMethod", "nilDeclXPkgCallee", "nilDeclXPkgCaller", "lifecycle_defer", "lifecycle_async", "lifecycle_callback", "lifecycle_storage", "lifecycle_channel", "higher_order", "higher_order_chain", "condGrammar", "condLogicalXPkgCallee", "condLogicalXPkgCaller", "condInconsistency", "condTagExhaustive", "condRangeNarrow", "condValueSum", "condPathNarrow", "condLifecyclePair", "condLifecyclePairXPkgCallee", "condLifecyclePairXPkgCaller", "closableGeneric", "closableStdHandle", "closableSuppress", "closableDeferredBorrow", "closableBufioWriter", "condCallerDeadGuard", "condCallerSafetyViolation", "condCallerNegativeForm", "condCallerGeneralCmp", "condUnresolvedRuleRef", "condTupleTypedElement", "condTupleXPkgPayload", "condTupleXPkgType")
+	analysistest.Run(t, analysistest.TestData(), Analyzer, "readonlyWrites", "sentinels", "sentinelsXPkgCallee", "sentinelsXPkgCaller", "composed", "import_unknown", "importPkgScope", "qualified_pkg", "qualified_consumer", "suppress", "discharged", "vowUse", "useHint", "concept", "vowEmit", "nilDeclBasic", "nilDeclKeywordForm", "nilDeclNest", "nilDeclNestArity", "nilDeclNestGenericNarrow", "nilDeclLayer", "nilDeclReassign", "nilDeclNarrow", "nilDeclFieldNarrow", "nilDeclFieldDeref", "nilDeclField", "nilDeclFieldAssign", "nilDeclFieldAssignFlow", "nilDeclCallResult", "nilDeclFieldConstruct", "nilDeclFieldConstructWhole", "nilDeclFieldReach", "nilDeclFieldGeneric", "nilDeclSelfBasic", "nilDeclCallerDeadGuard", "nilDeclSelfFlow", "nilDeclSelfNest", "nilDeclSelfRecv", "nilDeclReceiver", "nilDeclInterfaceMethod", "nilDeclXPkgCallee", "nilDeclXPkgCaller", "lifecycle_defer", "lifecycle_async", "lifecycle_callback", "lifecycle_storage", "lifecycle_channel", "higher_order", "higher_order_chain", "condGrammar", "condLogicalXPkgCallee", "condLogicalXPkgCaller", "condInconsistency", "condTagExhaustive", "condRangeNarrow", "condValueSum", "condPathNarrow", "condLifecyclePair", "condLifecyclePairXPkgCallee", "condLifecyclePairXPkgCaller", "closableGeneric", "closableStdHandle", "closableSuppress", "closableDeferredBorrow", "closableBufioWriter", "condCallerDeadGuard", "condCallerSafetyViolation", "condCallerNegativeForm", "condCallerGeneralCmp", "condUnresolvedRuleRef", "condTupleTypedElement", "condTupleXPkgPayload", "condTupleXPkgType", "markerShape", "condOperandReference")
 }
 
 // TestAnalyzerWrappedReturn drives the fifth vow:emit destination
@@ -64,6 +64,26 @@ severity: warning
 	assert.MustNoError(t, "parse the retry preset", err)
 	analyzer := New(append(builtinPresets(), retry), nil)
 	analysistest.Run(t, analysistest.TestData(), analyzer, "sentinelsPresetXPkgCallee", "sentinelsPresetXPkgCaller")
+}
+
+// TestAnalyzerMarkerShapePreset loads a preset whose subject selects
+// on its own marker, so the malformed-marker check treats that marker
+// as known.
+func TestAnalyzerMarkerShapePreset(t *testing.T) {
+	preset, err := dsl.Parse([]byte(`
+name: tracked
+version: "0.1"
+subjects:
+  - match: "annotation:vow:tracked"
+obligations:
+  - type: must-consume
+    detail:
+      consumers:
+        - errors.Is
+severity: warning
+`))
+	assert.MustNoError(t, "parse the tracked preset", err)
+	analysistest.Run(t, analysistest.TestData(), New([]*dsl.Preset{preset}, nil), "markerShapePreset")
 }
 
 // TestAnalyzerClosableConfigOptOut drives the per-directory

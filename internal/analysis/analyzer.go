@@ -62,8 +62,8 @@ func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Con
 		// Safe ahead of the marker discovery below: the report has no
 		// Category, so no vow:suppress or vow:use marker can drop it.
 		reportConfigError(pass, state)
-		// Discover caller-authored filter markers (vow:suppress,
-		// vow:use) before any obligation check emits a diagnostic.
+		// Discover the caller-authored filter markers, vow:suppress
+		// and vow:use, before any obligation check emits a diagnostic.
 		// The function-level / line-level sets must be populated
 		// when vowReport later asks "is this must-consume site
 		// suppressed?" or "is this must-consume subject asserted as
@@ -179,6 +179,9 @@ func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Con
 		// checks that the subject is function-typed so emission
 		// has a callable carrier to propagate through.
 		validateSubjectScopedLogicalConds(pass, state)
+		// The unscoped vow:cond gets the same operand check
+		// against the function's own signature.
+		validateLogicalCondReferences(pass, state)
 		validateSubjectScopedEmits(pass, state)
 		// Subject-scoped vow:nil contracts route through a
 		// callback signature rather than the enclosing function;
@@ -203,6 +206,9 @@ func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Con
 		// function-scoped by design; line-level or non-function
 		// occurrences would otherwise be silently discarded.
 		reportLineLevelDischarged(pass)
+		// Report a comment line that starts with vow: but that no
+		// marker reader picks up, such as a misspelt marker name.
+		reportMalformedMarkers(pass, state)
 		// Report any vow:use X function whose body lacks a
 		// discharge site for X. Each function is validated
 		// independently against the (a) direct-conditional and
@@ -259,8 +265,8 @@ func runFunc(base []*dsl.Preset, resolver *config.Resolver, override *config.Con
 		validateCondCallerSafetyViolation(pass, state)
 		// Report body-leading `if x == nil` guards whose
 		// parameter the function's own vow:cond prereq
-		// already proves non-nil at entry. The recogniser is
-		// vow:cond-driven so it covers sentinel-
+		// already proves non-nil at entry. The recogniser is driven
+		// by vow:cond so it covers sentinel-
 		// narrowing prereqs alongside any future prereq-based
 		// non-nil declaration that lands without going through
 		// the vow:nil signature-mirror surface.

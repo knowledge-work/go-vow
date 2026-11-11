@@ -33,7 +33,7 @@ func placeholderAdmitsNonSubject() error {
 }
 
 // placeholderSumGate is the function that carries the actual
-// vow:cond * -> annotation. Splitting the caller from the gate
+// annotation, vow:cond * ->. Splitting the caller from the gate
 // keeps the resolveExprAlias machinery from short-circuiting the
 // match on a direct subject reference.
 //

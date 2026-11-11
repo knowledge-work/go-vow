@@ -155,7 +155,7 @@ func findSSAReturnFor(ssaFn *ssa.Function, retPos token.Pos) *ssa.Return {
 }
 
 // parseConditionsFromDoc extracts every successfully-parsed
-// vow:cond annotation as an ordered slice of *dsl.Condition. The
+// annotation of vow:cond as an ordered slice of *dsl.Condition. The
 // case-style multi-condition semantics treat each line as an
 // independent case: applicable cases (Prereq holds) all enforce
 // their return requirements, and the chain-authorisation union
@@ -205,8 +205,8 @@ func parseConditionsFromDoc(decl *ast.FuncDecl, scope dsl.RuleScope) ([]*dsl.Con
 // marker carried no scope and the condition applies to the
 // enclosing function as usual.
 //
-// vow:cond accepts the chained `[X][Y]...` scope qualifier so the
-// condition retargets at nested higher-order callbacks.
+// The vow:cond marker accepts the chained `[X][Y]...` scope qualifier
+// so the condition retargets at nested higher-order callbacks.
 func splitDocMarker(line string) (marker string, subject dsl.SubjectChain, payload string, ok bool) {
 	chain, body, hit := stripMarkerScopeChain(line, rulesMarker)
 	if !hit || body == "" {

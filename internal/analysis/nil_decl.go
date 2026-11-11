@@ -157,9 +157,6 @@ func collectInterfaceMethodNilSignature(pass *analysis.Pass, field *ast.Field, f
 			vowReportNilSafetyf(pass, field.Pos(), "vow[nil-safety]: %s: subject-scoped markers are not supported on interface methods", nilDeclMarker)
 			continue
 		}
-		if payload == "" {
-			continue
-		}
 		parsed, err := dsl.ParseNilSignature(payload)
 		if err != nil {
 			vowReportNilSafetyf(pass, field.Pos(), "vow[nil-safety]: %s: %v", nilDeclMarker, err)
@@ -226,8 +223,8 @@ func checkInterfaceMethodSignatureArity(pass *analysis.Pass, field *ast.Field, f
 // Subject means the marker carried no scope and the declaration
 // applies to the enclosing function as usual.
 //
-// vow:cond * -> _, ok (bool) reflects "marker present, parse succeeded"
-// vs "no marker or parse failed". Parse-failure diagnostics anchor
+// The ok result reflects "marker present, parse succeeded" vs "no
+// marker or parse failed". Parse-failure diagnostics anchor
 // at the function declaration so the author sees one error per
 // malformed marker site.
 func collectNilSignature(pass *analysis.Pass, fn *ast.FuncDecl) (*dsl.NilSignature, bool) {
@@ -239,9 +236,6 @@ func collectNilSignature(pass *analysis.Pass, fn *ast.FuncDecl) (*dsl.NilSignatu
 		line := strings.TrimSpace(strings.TrimPrefix(c.Text, "//"))
 		chain, payload, ok := stripMarkerScopeChain(line, nilDeclMarker)
 		if !ok {
-			continue
-		}
-		if payload == "" {
 			continue
 		}
 		parsed, err := dsl.ParseNilSignature(payload)

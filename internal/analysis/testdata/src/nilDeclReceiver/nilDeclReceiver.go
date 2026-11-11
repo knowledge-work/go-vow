@@ -86,8 +86,8 @@ func vowDeclaredSilent() {
 	_ = (*VowOnlyService)(nil).declaredButNoRecvDecl(&a)
 }
 
-// vowDeclaredArgSilent pins the silent baseline on a
-// vow:cond-only method: the `nonnil x` prereq is a
+// vowDeclaredArgSilent pins the silent baseline on a method
+// with only vow:cond: the `nonnil x` prereq is a
 // sentinel-narrowing predicate (with a body-leading dead-guard
 // recogniser), not a caller-side argument check, so a nil
 // argument at the call site stays silent. The receiver axis

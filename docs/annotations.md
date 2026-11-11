@@ -4,10 +4,18 @@ Every contract `vow` enforces is conveyed through doc-comment
 markers. This page lists each `vow:` marker, where it must be
 placed, and what it changes about the analyzer's behaviour.
 
-Markers must appear on their own comment line (or as the first
-token of a multi-line comment block parsed from `Doc.Text()`). The
-parser anchors on the line prefix, so a marker buried in prose is
-not recognised.
+Write each marker at the start of its own `//` comment line; only
+`vow:define`, `vow:discharged`, and the markers a preset selects on
+are also read from a `/* */` comment. The parser anchors on the line
+prefix, so a marker buried in prose is not recognised.
+
+A comment line that starts with `vow:` but is not recognised as a
+marker is reported as a `vow[annotation]` diagnostic instead of being
+ignored. The causes are an unknown marker name (`vow:nill`), a
+character after the name that the marker does not accept
+(`vow:nil(!)`), a malformed `[subject]` scope, and a comment form the
+marker is not read from (a `/* */` comment, or `//vow:define` with no
+space after the slashes).
 
 ## `vow:define @Sentinel`
 
@@ -1165,21 +1173,16 @@ declaration:
 func helper() { ... }
 ```
 
-Two safe options keep the prose readable without misleading the
-analyzer:
+Re-flow the sentence so the marker appears mid-line:
 
-- Re-flow the sentence so the marker appears mid-line:
+```go
+// helper documents the payload format of the vow:emit marker.
+```
 
-  ```go
-  // helper documents the payload format of the vow:emit marker.
-  ```
-
-- Use indentation or punctuation to break the prefix match:
-
-  ```go
-  // helper documents the
-  //   vow:emit marker (indented; the analyzer skips).
-  ```
+Indentation does not help, because the analyzer trims it. A line that
+starts with a marker name is read as that marker; only for
+`vow:define` and `vow:import` is a payload that does not parse still
+ignored rather than reported.
 
 The same constraint applies to vow's own source comments — see
 the in-repo guides under `internal/analysis/emit_shorthand.go`

@@ -1,7 +1,7 @@
 package sentinels
 
 // aliasReturnMatchesAnnotation exercises variable-flow inside the
-// vow:cond * -> validator: `x := ErrFoo` then `return x` resolves to
+// validator of vow:cond * ->: `x := ErrFoo` then `return x` resolves to
 // the same shape as `return ErrFoo`, and ErrFoo is listed in the sum,
 // so the position is silent.
 //
