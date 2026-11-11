@@ -6,9 +6,8 @@ package qualified_pkg
 
 import "errors"
 
-// ErrFoo is the cross-package sentinel under test. The vow:define @Sentinel
-// marker is intentionally absent in this file — the cross-package
-// fixture infrastructure focuses on `vow:cond` references, and
-// the cross-package subjects path waits until inter-procedural work
-// gives findSubjects a multi-package view.
+// ErrFoo is the cross-package sentinel under test. It carries no
+// subject marker, so the consumer's returns exercise the qualified-name
+// matching alone; a marked sentinel would add the must-consume check
+// to each of them, which sentinelsXPkgCaller covers.
 var ErrFoo = errors.New("foo")

@@ -5,10 +5,10 @@ import "errors"
 // ErrPair and ErrAlt exercise tuple-sum and value-literal positions.
 
 // vow:define @Sentinel
-var ErrPair = errors.New("pair")
+var ErrPair = errors.New("pair") // want ErrPair:"subject\\(vow:define @Sentinel\\)"
 
 // vow:define @Sentinel
-var ErrAlt = errors.New("alt")
+var ErrAlt = errors.New("alt") // want ErrAlt:"subject\\(vow:define @Sentinel\\)"
 
 // exclusivePairOK returns one of the two declared (value, error)
 // tuples. Both branches match a declared tuple — no diagnostic.

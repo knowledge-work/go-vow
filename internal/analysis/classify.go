@@ -25,11 +25,12 @@ const (
 )
 
 // classifyReference assigns a class to a subject reference based on
-// the AST stack from the file root (index 0) down to the Ident itself
-// (last index). observerNames lists the qualified function names that
+// the AST stack from the file root (index 0) down to the reference
+// itself — an identifier, or a qualified identifier (`pkg.ErrFoo`) — at
+// the last index. observerNames lists the qualified function names that
 // can discharge the obligation when invoked inside a conditional;
-// subjectName is the simple identifier name of the referenced subject
-// (used to consult a direct sum declared via vow:cond).
+// subjectName is the subject's name as the reference spells it (used
+// to consult a direct sum declared via vow:cond).
 //
 // Classification is ordered: observation (discharges the obligation
 // in-place) is preferred over chain (which only postpones the
@@ -166,7 +167,8 @@ func isObserveUse(pass *analysis.Pass, stack []ast.Node, observerNames []string,
 
 // isInConditional walks outward from the observation-shape node at
 // stack[shapeIdx] and reports whether some ancestor is an if/switch
-// with the shape sitting in its Cond / Init / Tag position.
+// with the shape sitting in its Cond / Init / Tag position, or a case
+// clause with the shape in its list (`switch { case errors.Is(...): }`).
 //
 // Intermediate "boolean-evaluation glue" is transparently traversed:
 //
@@ -191,6 +193,8 @@ func isInConditional(stack []ast.Node, shapeIdx int) bool {
 			return child == x.Cond || child == x.Init
 		case *ast.SwitchStmt:
 			return child == x.Tag || child == x.Init
+		case *ast.CaseClause:
+			return nodeAmong(child, x.List)
 		case *ast.AssignStmt, *ast.ParenExpr, *ast.BinaryExpr, *ast.UnaryExpr,
 			*ast.IndexExpr, *ast.TypeAssertExpr:
 			// Boolean-evaluation glue; keep walking outward.

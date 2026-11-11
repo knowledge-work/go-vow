@@ -13,7 +13,7 @@ import (
 // ErrGone is a sentinel the replacing preset tracks.
 //
 // vow:define @Sentinel
-var ErrGone = errors.New("gone")
+var ErrGone = errors.New("gone") // want ErrGone:"subject\\(vow:define @Sentinel\\)"
 
 // observed hands ErrGone to the consumer only the replacing preset
 // lists. The built-in preset would report the reference as a leak.

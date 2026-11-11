@@ -629,9 +629,10 @@ func termMatchesIdentShape(term *dsl.Term, shape exprShape) bool {
 // `(ErrFoo | *)` for "list the interesting subjects but accept
 // every other value" boundaries. The `_` placeholder is the
 // label-aware counterpart: it admits literals, nil, and non-
-// subject identifiers, but a labelled subject the package
-// declares (via vow:define @Sentinel) is excluded
-// so authors who want to forward it must list it explicitly.
+// subject identifiers, but a labelled subject (a var marked
+// vow:define @Sentinel, in the package or in one it imports) is
+// excluded so authors who want to forward it must list it
+// explicitly.
 //
 // The `_` vs `*` asymmetry is a deliberate invariant, not sugar:
 // `*` admits the whole open set while `_` carves out the labelled

@@ -1,8 +1,9 @@
 // Package qualified_consumer exercises the cross-package qualified
 // identifier matching paths: the syntactic short name written at the
 // call site, and the fully-qualified name resolved through
-// types.Info. Each function declares a vow:cond sum that names
-// qualified_pkg.ErrFoo and returns the corresponding value.
+// types.Info. Each function in this file declares a vow:cond sum that
+// names qualified_pkg.ErrFoo and returns the corresponding value;
+// self_validation.go names it in vow:emit and vow:use instead.
 package qualified_consumer
 
 import "qualified_pkg"

@@ -25,7 +25,7 @@ import "errors"
 // against the innermost callback signature.
 //
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // InnerFn is the innermost callback shape; the chain's deepest
 // segment resolves against this signature, so body references

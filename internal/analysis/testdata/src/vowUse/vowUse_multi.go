@@ -5,7 +5,7 @@ import "errors"
 // ErrBar is a second subject used to exercise the multi-rule
 // discharge surface.
 // vow:define @Sentinel
-var ErrBar = errors.New("bar")
+var ErrBar = errors.New("bar") // want ErrBar:"subject\\(vow:define @Sentinel\\)"
 
 // multiSubject declares two discharge contracts through the
 // ';'-separated multi-rule grammar. Each subject is validated

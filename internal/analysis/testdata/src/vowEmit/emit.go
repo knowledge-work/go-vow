@@ -14,7 +14,7 @@ import (
 // `vow:emit ErrFoo` declaration does not silently authorise ErrBar.
 //
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // vow:define @Sentinel
-var ErrBar = errors.New("bar")
+var ErrBar = errors.New("bar") // want ErrBar:"subject\\(vow:define @Sentinel\\)"

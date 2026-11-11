@@ -470,15 +470,28 @@ tandem, and the two passes report independently.
 
 ## Cross-package considerations
 
-- **Subjects.** The current `findSubjects` is per-package; a sentinel
-  declared in one package is recognised as a subject when its
-  declaration site is part of the analysis target. Inter-procedural
-  subject tracking is not supported.
-- **Qualified references.** The four-axis Term comparison handles
-  cross-package references through the `fullName` axis. A
-  `vow:cond pkg.ErrFoo | nil ` annotation matches a
-  `return pkg.ErrFoo` regardless of import aliasing once `types.Info`
-  resolves both sides.
+- **Subjects.** A sentinel is a subject in every package that refers
+  to it, not only in the one that declares it, so a
+  `return store.ErrNotFound` outside `store` is classified as it
+  would be inside. `exportSubjectFacts` publishes a `subjectFact` on
+  each exported var whose doc carries a preset's subject marker,
+  listing the markers it carries, and `findSubjects` puts each var
+  from another package that the package refers to into the subject
+  set of every preset whose marker the fact lists. A sentinel that
+  reaches a package only inside a callee's `error` result is not
+  tracked there, since nothing in that package names it.
+- **Qualified references.** The must-consume check names the
+  subject the way the reference spells it — `store.ErrFoo`, the
+  local name of a renamed import, or the bare name under a dot
+  import — and `vow:emit` and `vow:use` authorise or discharge it
+  only under that name. A `vow:cond` Term may also give the import
+  path (`example.com/store.ErrFoo`): the return-annotation check
+  matches it through the `fullName` axis, and the chain
+  authorisation resolves the spelt name to the same form, so it
+  matches whatever local name the file gives the package. The spelt
+  name follows each file's imports, so a `vow:use` function matches
+  calls only from files that import the package under the same
+  name.
 - **Generics.** The SSA pass's `findSSAFunction` maps an
   `*ast.FuncDecl` to its `*ssa.Function` by `Syntax()` pointer
   equality. Under the default `buildssa.BuilderMode(0)`, a generic

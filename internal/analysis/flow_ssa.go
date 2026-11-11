@@ -3,12 +3,15 @@ package analysis
 import (
 	"go/ast"
 	"go/token"
+	"go/types"
+	"maps"
 
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/buildssa"
 	"golang.org/x/tools/go/ssa"
 
 	"github.com/knowledge-work/go-vow/internal/dsl"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // reportSSALeaks complements reportMustConsume's per-identifier walk
@@ -63,7 +66,7 @@ func reportSSALeaks(pass *analysis.Pass, preset *dsl.Preset, subjects subjectSet
 					if _, named := resolveSubjectInFunc(pass, fn, ident, subjects); named {
 						continue
 					}
-					for _, name := range ssaSubjectsAtReturn(ssaFn, ret, expr, subjects, pass, state) {
+					for _, name := range ssaSubjectsAtReturn(ssaFn, file, ret, expr, subjects, pass, state) {
 						if functionAuthorizesPropagation(pass, fn, ret, name, scope, state) {
 							continue
 						}
@@ -84,11 +87,12 @@ func reportSSALeaks(pass *analysis.Pass, preset *dsl.Preset, subjects subjectSet
 }
 
 // ssaSubjectsAtReturn returns the set of tracked subject names that
-// flow into the given return result. The SSA representation is
-// consulted by locating the *ssa.Return whose source position equals
-// the AST ReturnStmt's position and walking the matching Results
-// value backward through phi nodes and trivial loads.
-func ssaSubjectsAtReturn(ssaFn *ssa.Function, ret *ast.ReturnStmt, expr ast.Expr, subjects subjectSet, pass *analysis.Pass, state *passState) []string {
+// flow into the given return result, each named the way file refers to
+// it. The SSA representation is consulted by locating the *ssa.Return
+// whose source position equals the AST ReturnStmt's position and
+// walking the matching Results value backward through phi nodes and
+// trivial loads.
+func ssaSubjectsAtReturn(ssaFn *ssa.Function, file *ast.File, ret *ast.ReturnStmt, expr ast.Expr, subjects subjectSet, pass *analysis.Pass, state *passState) []string {
 	resultIdx := -1
 	for i, r := range ret.Results {
 		if r == expr {
@@ -103,17 +107,39 @@ func ssaSubjectsAtReturn(ssaFn *ssa.Function, ret *ast.ReturnStmt, expr ast.Expr
 	if ssaRet == nil || resultIdx >= len(ssaRet.Results) {
 		return nil
 	}
-	names := map[string]struct{}{}
+	found := map[types.Object]struct{}{}
 	visited := map[ssa.Value]struct{}{}
-	collectSSASubjects(ssaRet.Results[resultIdx], subjects, names, visited, pass, state)
-	if len(names) == 0 {
+	collectSSASubjects(ssaRet.Results[resultIdx], subjects, found, visited, pass, state)
+	if len(found) == 0 {
 		return nil
 	}
-	out := make([]string, 0, len(names))
-	for n := range names {
-		out = append(out, n)
+	return seq.NewChain(maps.Keys(found)).
+		Map(func(obj types.Object) string { return subjectNameInFile(pass, file, obj) }).
+		ToSlice()
+}
+
+// subjectNameInFile returns the display name a reference in file
+// gives the subject obj: the bare name for a var of the package under
+// analysis or of a dot-imported package, and `pkg.Name` otherwise,
+// with pkg the local name file gives the package. When file does not
+// import the package, pkg is the package's own name; when file
+// imports it twice, pkg is the name of the first import.
+func subjectNameInFile(pass *analysis.Pass, file *ast.File, obj types.Object) string {
+	if obj.Pkg() == pass.Pkg {
+		return obj.Name()
 	}
-	return out
+	spec, found := seq.ChainOf(file.Imports...).Find(func(spec *ast.ImportSpec) bool {
+		pkgName := pass.TypesInfo.PkgNameOf(spec)
+		return pkgName != nil && pkgName.Imported() == obj.Pkg()
+	})
+	if !found {
+		return obj.Pkg().Name() + "." + obj.Name()
+	}
+	name := pass.TypesInfo.PkgNameOf(spec).Name()
+	if name == "." {
+		return obj.Name()
+	}
+	return name + "." + obj.Name()
 }
 
 // findSSAFunction returns the SSA function whose Syntax matches fn,
@@ -159,14 +185,14 @@ func findSSAReturn(fn *ssa.Function, retPos token.Pos) *ssa.Return {
 }
 
 // collectSSASubjects walks v backward through phi nodes and UnOp
-// dereference loads, inserting any *ssa.Global whose object lies in
-// the subject set into names. The visited map breaks cycles created
+// dereference loads, inserting into found each *ssa.Global's object
+// that lies in the subject set. The visited map breaks cycles created
 // by phi self-references (typical for loop-carried locals) and
 // avoids quadratic work on phis with duplicated edges. A static
 // call to a vow:discharged function terminates the walk at that node:
 // values originating in a discharged callee are trusted by the caller
 // and never count as a leaked subject.
-func collectSSASubjects(v ssa.Value, subjects subjectSet, names map[string]struct{}, visited map[ssa.Value]struct{}, pass *analysis.Pass, state *passState) {
+func collectSSASubjects(v ssa.Value, subjects subjectSet, found map[types.Object]struct{}, visited map[ssa.Value]struct{}, pass *analysis.Pass, state *passState) {
 	if v == nil {
 		return
 	}
@@ -177,11 +203,11 @@ func collectSSASubjects(v ssa.Value, subjects subjectSet, names map[string]struc
 	switch n := v.(type) {
 	case *ssa.Phi:
 		for _, edge := range n.Edges {
-			collectSSASubjects(edge, subjects, names, visited, pass, state)
+			collectSSASubjects(edge, subjects, found, visited, pass, state)
 		}
 	case *ssa.UnOp:
 		if n.Op == token.MUL {
-			collectSSASubjects(n.X, subjects, names, visited, pass, state)
+			collectSSASubjects(n.X, subjects, found, visited, pass, state)
 		}
 	case *ssa.Call:
 		if isDischargedSSACall(n, pass, state) {
@@ -190,7 +216,7 @@ func collectSSASubjects(v ssa.Value, subjects subjectSet, names map[string]struc
 	case *ssa.Global:
 		obj := n.Object()
 		if obj != nil && subjects.contains(obj) {
-			names[obj.Name()] = struct{}{}
+			found[obj] = struct{}{}
 		}
 	}
 }

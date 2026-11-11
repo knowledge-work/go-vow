@@ -9,7 +9,7 @@ import "errors"
 // ErrGone is checked by the built-in sentinel-error preset.
 //
 // vow:define @Sentinel
-var ErrGone = errors.New("gone")
+var ErrGone = errors.New("gone") // want ErrGone:"subject\\(vow:define @Sentinel\\)"
 
 func leaks() error {
 	return ErrGone // want `vow\[sentinel-error\]: sentinel error ErrGone leaked`

@@ -51,10 +51,11 @@ func resolveLocalAlias(fn *ast.FuncDecl, ident *ast.Ident) ast.Expr {
 	return found
 }
 
-// isAliasBindingRHS reports whether the stack ends with an identifier
-// that sits as a right-hand side of a short-form (`:=`) assignment.
-// Such identifiers are bookkeeping for the local alias resolver — the
-// classifier should not treat them as independent uses of the subject.
+// isAliasBindingRHS reports whether the stack ends with a reference —
+// an identifier or a qualified identifier — that sits as a right-hand
+// side of a short-form (`:=`) assignment. Such references are
+// bookkeeping for the local alias resolver — the classifier should not
+// treat them as independent uses of the subject.
 func isAliasBindingRHS(stack []ast.Node) bool {
 	if len(stack) < 2 {
 		return false
@@ -83,20 +84,21 @@ func enclosingFuncDecl(stack []ast.Node) *ast.FuncDecl {
 	return nil
 }
 
-// resolveSubject decides whether ident refers (directly or via a
-// single-define alias) to one of the package's tracked subjects. It
-// returns the subject's display name and true on success.
+// resolveSubject decides whether ref — an identifier or a qualified
+// identifier — refers (directly or via a single-define alias) to a
+// subject in subjects. It returns the subject's display name and true
+// on success.
 //
 // The stack is consulted only to find the enclosing FuncDecl. Callers
 // that already have the FuncDecl on hand (e.g. the SSA leak detector
 // in flow_ssa.go) should invoke resolveSubjectInFunc directly to skip
 // the walk-out step.
-func resolveSubject(pass *analysis.Pass, stack []ast.Node, ident *ast.Ident, subjects subjectSet) (string, bool) {
+func resolveSubject(pass *analysis.Pass, stack []ast.Node, ref ast.Expr, subjects subjectSet) (string, bool) {
 	fn := enclosingFuncDecl(stack)
 	if fn == nil {
-		return resolveSubjectInFunc(pass, nil, ident, subjects)
+		return resolveSubjectInFunc(pass, nil, ref, subjects)
 	}
-	return resolveSubjectInFunc(pass, fn, ident, subjects)
+	return resolveSubjectInFunc(pass, fn, ref, subjects)
 }
 
 // resolveSubjectInFunc is the stack-independent core shared by the
@@ -107,23 +109,37 @@ func resolveSubject(pass *analysis.Pass, stack []ast.Node, ident *ast.Ident, sub
 // the direct check applies. Only one hop is followed so
 // `y := x; x := ErrFoo; return y` stays unresolved at the syntactic
 // level (the SSA pass picks up the rest).
-func resolveSubjectInFunc(pass *analysis.Pass, fn *ast.FuncDecl, ident *ast.Ident, subjects subjectSet) (string, bool) {
-	if subjects.contains(pass.TypesInfo.ObjectOf(ident)) {
-		return ident.Name, true
+func resolveSubjectInFunc(pass *analysis.Pass, fn *ast.FuncDecl, ref ast.Expr, subjects subjectSet) (string, bool) {
+	if name, ok := subjectNameOf(pass, ref, subjects); ok {
+		return name, true
 	}
-	if fn == nil {
+	ident, ok := ref.(*ast.Ident)
+	if !ok || fn == nil {
 		return "", false
 	}
 	rhs := resolveLocalAlias(fn, ident)
 	if rhs == nil {
 		return "", false
 	}
-	rhsIdent, ok := rhs.(*ast.Ident)
-	if !ok {
-		return "", false
+	return subjectNameOf(pass, rhs, subjects)
+}
+
+// subjectNameOf returns the display name of the subject that expr
+// names directly — the identifier for a bare reference, the `pkg.Name`
+// text for a qualified one — and false when expr names no subject in
+// subjects. The qualified text is how annotations in the referencing
+// package list a subject another package declares.
+func subjectNameOf(pass *analysis.Pass, expr ast.Expr, subjects subjectSet) (string, bool) {
+	switch e := expr.(type) {
+	case *ast.Ident:
+		if subjects.contains(pass.TypesInfo.ObjectOf(e)) {
+			return e.Name, true
+		}
+	case *ast.SelectorExpr:
+		name := qualifiedIdentName(pass, e)
+		if name != "" && subjects.contains(pass.TypesInfo.ObjectOf(e.Sel)) {
+			return name, true
+		}
 	}
-	if !subjects.contains(pass.TypesInfo.ObjectOf(rhsIdent)) {
-		return "", false
-	}
-	return rhsIdent.Name, true
+	return "", false
 }

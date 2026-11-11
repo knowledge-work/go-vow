@@ -178,9 +178,10 @@ func validateUseCallees(pass *analysis.Pass, state *passState) {
 // least one site that discharges subject. The walk returns at the
 // first match so a single qualifying site satisfies the contract.
 // Four recognised sites: an identifier reference in conditional
-// context, an errors.Is/As call carrying the subject, a handoff
-// call to another `vow:use subject` function, or a statement-scope
-// `vow:use` marker that names the subject.
+// context (bare, or qualified and matched by its `pkg.Name` text),
+// an errors.Is/As call carrying the subject, a handoff call to
+// another `vow:use subject` function, or a statement-scope `vow:use`
+// marker that names the subject.
 func functionDischargesSubject(pass *analysis.Pass, state *passState, fn *ast.FuncDecl, subject string, use map[types.Object][]string) bool {
 	if stmtScopeUseAssertsSubject(pass, state, fn, subject) {
 		return true
@@ -204,6 +205,11 @@ func functionDischargesSubject(pass *analysis.Pass, state *passState, fn *ast.Fu
 				found = true
 				return false
 			}
+		case *ast.SelectorExpr:
+			if qualifiedIdentName(pass, v) == subject && identIsInConditional(stack) {
+				found = true
+				return false
+			}
 		case *ast.CallExpr:
 			if calleeIsUseFor(pass, v, subject, use) {
 				found = true
@@ -219,11 +225,12 @@ func functionDischargesSubject(pass *analysis.Pass, state *passState, fn *ast.Fu
 	return found
 }
 
-// identIsInConditional reports whether the identifier at the top
-// of stack sits in the cond / init / tag position of an enclosing
-// if or switch. Boolean glue (parens, !, &&, ||, ==, !=, IndexExpr,
-// TypeAssertExpr, AssignStmt Init) is walked through so a subject
-// reference buried in a comparison still counts. Call expressions
+// identIsInConditional reports whether the reference at the top of
+// stack — an identifier, or a qualified identifier — sits in the
+// cond / init / tag position of an enclosing if or switch. Boolean
+// glue (parens, !, &&, ||, ==, !=, IndexExpr, TypeAssertExpr,
+// AssignStmt Init) is walked through so a subject reference buried
+// in a comparison still counts. Call expressions
 // intentionally do not transit; a subject reference nested inside
 // a call argument requires a transducer, handoff, or errors.Is/As
 // recognition to count.
@@ -294,26 +301,30 @@ func callIsErrorsIsAsFor(pass *analysis.Pass, call *ast.CallExpr, subject string
 	if len(call.Args) < 2 {
 		return false
 	}
-	return argReferencesSubject(call.Args[1], subject)
+	return argReferencesSubject(pass, call.Args[1], subject)
 }
 
 // argReferencesSubject reports whether expr names subject either
-// directly, through a selector tail, or through a single address-of
-// (`&X`). The recognition mirrors the surface forms
+// directly, through the `pkg.Name` text of a qualified identifier,
+// through the tail of any other selector, or through a single
+// address-of (`&X`). The recognition mirrors the surface forms
 // `errors.Is(err, ErrFoo)` and `errors.As(err, &target)` use; deeper
 // expression shapes are not credited because the analyzer cannot
 // statically confirm they resolve to the named subject.
-func argReferencesSubject(expr ast.Expr, subject string) bool {
+func argReferencesSubject(pass *analysis.Pass, expr ast.Expr, subject string) bool {
 	switch v := expr.(type) {
 	case *ast.Ident:
 		return v.Name == subject
 	case *ast.SelectorExpr:
+		if qualified := qualifiedIdentName(pass, v); qualified != "" {
+			return qualified == subject
+		}
 		return v.Sel != nil && v.Sel.Name == subject
 	case *ast.UnaryExpr:
 		if v.Op != token.AND {
 			return false
 		}
-		return argReferencesSubject(v.X, subject)
+		return argReferencesSubject(pass, v.X, subject)
 	}
 	return false
 }

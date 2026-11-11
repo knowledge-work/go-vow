@@ -37,6 +37,7 @@ func reportMustConsume(pass *analysis.Pass, preset *dsl.Preset, subjects subject
 		if pass.TypesInfo.Defs[ident] != nil {
 			return true
 		}
+		ref, stack := subjectReference(pass, ident, stack)
 		// Skip subject references that sit on the RHS of a short-form
 		// alias binding (`x := ErrFoo`). The reference is not a real
 		// use of the sentinel — it just names the value the alias
@@ -46,14 +47,14 @@ func reportMustConsume(pass *analysis.Pass, preset *dsl.Preset, subjects subject
 		if isAliasBindingRHS(stack) {
 			return true
 		}
-		subjectName, isSubject := resolveSubject(pass, stack, ident, subjects)
+		subjectName, isSubject := resolveSubject(pass, stack, ref, subjects)
 		if !isSubject {
 			return true
 		}
 		if classifyReference(pass, stack, observerNames, subjectName, state) == classLeak {
 			vowReportMustConsumef(
 				pass,
-				ident.Pos(),
+				ref.Pos(),
 				subjectName,
 				"vow[%s]: sentinel error %s leaked: needs observation or explicit propagation",
 				preset.Name,
@@ -62,4 +63,19 @@ func reportMustConsume(pass *analysis.Pass, preset *dsl.Preset, subjects subject
 		}
 		return true
 	})
+}
+
+// subjectReference returns the whole reference that ident belongs to —
+// the qualified identifier `pkg.ErrFoo` when ident is its name part,
+// ident itself otherwise — and stack trimmed to end at that reference,
+// so the classification reads the parent of the whole reference.
+func subjectReference(pass *analysis.Pass, ident *ast.Ident, stack []ast.Node) (ast.Expr, []ast.Node) {
+	if len(stack) < 2 {
+		return ident, stack
+	}
+	sel, ok := stack[len(stack)-2].(*ast.SelectorExpr)
+	if !ok || sel.Sel != ident || qualifiedIdentName(pass, sel) == "" {
+		return ident, stack
+	}
+	return sel, stack[:len(stack)-1]
 }

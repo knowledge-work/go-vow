@@ -12,10 +12,10 @@ package composed
 import "errors"
 
 // vow:define @Sentinel
-var OkMarker = errors.New("ok")
+var OkMarker = errors.New("ok") // want OkMarker:"subject\\(vow:define @Sentinel\\)"
 
 // vow:define @Sentinel
-var ErrNotReady = errors.New("not ready")
+var ErrNotReady = errors.New("not ready") // want ErrNotReady:"subject\\(vow:define @Sentinel\\)"
 
 // okErrOK returns either (OkMarker, nil) or (nil, ErrNotReady); both
 // alternatives match a tuple of the expanded OkErr rule. No
@@ -56,7 +56,7 @@ func eitherOK(ok bool) error {
 // sum after rule expansion.
 //
 // vow:define @Sentinel
-var ErrUnexpected = errors.New("unexpected")
+var ErrUnexpected = errors.New("unexpected") // want ErrUnexpected:"subject\\(vow:define @Sentinel\\)"
 
 // eitherLeak returns ErrUnexpected, which is not listed in the
 // expanded Either sum. Two diagnostics fire on the same identifier:

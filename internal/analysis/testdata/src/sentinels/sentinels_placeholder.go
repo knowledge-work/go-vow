@@ -18,7 +18,7 @@ import "errors"
 // discovery path it reaches every other tracked sentinel.
 //
 // vow:define @Sentinel
-var ErrLabel = errors.New("label")
+var ErrLabel = errors.New("label") // want ErrLabel:"subject\\(vow:define @Sentinel\\)"
 
 // placeholderAdmitsNonSubject returns a non-subject error
 // (locally constructed via errors.New, NOT bound to one of the

@@ -11,7 +11,7 @@ import (
 
 // ErrNotFound is the subject under test.
 // vow:define @Sentinel
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = errors.New("not found") // want ErrNotFound:"subject\\(vow:define @Sentinel\\)"
 
 // --- observe: errors.Is inside an if condition. ---
 
@@ -51,6 +51,27 @@ func observedBySwitch(err error) error {
 		return nil
 	}
 	return nil
+}
+
+// --- observe: errors.Is in the case list of a tagless switch. ---
+
+func observedByTaglessSwitch(err error) int {
+	switch {
+	case errors.Is(err, ErrNotFound):
+		return 404
+	}
+	return 500
+}
+
+// --- leak: errors.Is in a case body, which is not a condition. ---
+
+func leakInCaseBody(err error) bool {
+	matched := false
+	switch {
+	case err != nil:
+		matched = errors.Is(err, ErrNotFound) // want `vow\[sentinel-error\]: sentinel error ErrNotFound leaked: needs observation or explicit propagation`
+	}
+	return matched
 }
 
 // --- chain: explicit propagation authorized by vow:cond. ---
@@ -102,4 +123,12 @@ var ErrOther = errors.New("other")
 
 func returnNonSentinel() error {
 	return ErrOther
+}
+
+// chainedThroughImportPath lists the sentinel by its import path, which
+// authorises the return as the bare name does.
+//
+// vow:cond * -> sentinels.ErrNotFound | nil
+func chainedThroughImportPath() error {
+	return ErrNotFound
 }

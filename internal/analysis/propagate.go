@@ -2,6 +2,8 @@ package analysis
 
 import (
 	"go/ast"
+	"go/token"
+	"go/types"
 	"slices"
 	"strings"
 
@@ -60,7 +62,9 @@ func funcLitAuthorizesPropagation(pass *analysis.Pass, prefix []ast.Node, ret *a
 // SSA dominator walk in prereqHoldsAtReturn so each return's
 // chain authorisation tracks the same narrowed scope the
 // return-requirement enforcement uses. A single matching case
-// is enough.
+// is enough. A Term lists the subject under subjectName or under
+// its import path form (`example.com/store.ErrFoo`), the two
+// spellings the return-requirement enforcement also matches.
 func returnAnnotationLists(pass *analysis.Pass, decl *ast.FuncDecl, ret *ast.ReturnStmt, subjectName string, scope dsl.RuleScope, state *passState) bool {
 	if obj := pass.TypesInfo.Defs[decl.Name]; obj != nil {
 		if subjects, ok := state.emitSet(pass)[obj]; ok && containsSubject(subjects, subjectName) {
@@ -70,6 +74,10 @@ func returnAnnotationLists(pass *analysis.Pass, decl *ast.FuncDecl, ret *ast.Ret
 	conds, ok := state.annotation(decl, scope)
 	if !ok {
 		return false
+	}
+	names := []string{subjectName}
+	if pathName := subjectImportPathName(pass, decl, subjectName); pathName != "" {
+		names = append(names, pathName)
 	}
 	ssaFn := findSSAFunction(ssaFunctions(pass), decl)
 	var ssaRet *ssa.Return
@@ -87,15 +95,43 @@ func returnAnnotationLists(pass *analysis.Pass, decl *ast.FuncDecl, ret *ast.Ret
 		if cond.Prereq != nil && !prereqHoldsAtReturn(decl, ssaFn, ssaRet, cond.Prereq) {
 			continue
 		}
-		if conditionAuthorisesSubject(cond.Conseq, subjectName) {
+		if conditionAuthorisesSubject(cond.Conseq, names) {
 			return true
 		}
 	}
 	return false
 }
 
+// subjectImportPathName returns the `import/path.Name` form of the
+// package-level var that a reference in decl's file spells as name,
+// or "" when name resolves to none there.
+func subjectImportPathName(pass *analysis.Pass, decl *ast.FuncDecl, name string) string {
+	file := fileContainingDecl(pass, decl)
+	if file == nil {
+		return ""
+	}
+	scope := pass.TypesInfo.Scopes[file]
+	if scope == nil {
+		return ""
+	}
+	var obj types.Object
+	if qualifier, member, qualified := strings.Cut(name, "."); qualified {
+		pkgName, ok := scope.Lookup(qualifier).(*types.PkgName)
+		if !ok {
+			return ""
+		}
+		obj = pkgName.Imported().Scope().Lookup(member)
+	} else {
+		_, obj = scope.LookupParent(name, token.NoPos)
+	}
+	if obj == nil || obj.Pkg() == nil {
+		return ""
+	}
+	return obj.Pkg().Path() + "." + obj.Name()
+}
+
 // conditionAuthorisesSubject reports whether the return
-// requirement of a Condition lists subjectName as an admitted value
+// requirement of a Condition lists one of names as an admitted value
 // — either inside a tuple-sum member, a position-wise direct sum,
 // or as a Single `*` wildcard position. The wildcard branch
 // honours the admission-set consistency between the matcher and
@@ -106,11 +142,11 @@ func returnAnnotationLists(pass *analysis.Pass, decl *ast.FuncDecl, ret *ast.Ret
 // `_` placeholder Single does not, mirroring its label-aware
 // exclusion in the matcher. The `_` vs `*` asymmetry is the
 // documented invariant — see sumListsSubject.
-func conditionAuthorisesSubject(anno *dsl.ReturnAnnotation, subjectName string) bool {
+func conditionAuthorisesSubject(anno *dsl.ReturnAnnotation, names []string) bool {
 	if anno == nil {
 		return false
 	}
-	if anno.TupleSum != nil && sumListsSubject(anno.TupleSum, subjectName) {
+	if anno.TupleSum != nil && sumListsSubject(anno.TupleSum, names) {
 		return true
 	}
 	for _, pos := range anno.Positions {
@@ -120,16 +156,16 @@ func conditionAuthorisesSubject(anno *dsl.ReturnAnnotation, subjectName string) 
 		if pos.Sum == nil {
 			continue
 		}
-		if sumListsSubject(pos.Sum, subjectName) {
+		if sumListsSubject(pos.Sum, names) {
 			return true
 		}
 	}
 	return false
 }
 
-// sumListsSubject reports whether the named subject is authorised
-// by any member (or tuple element) of the sum. A textual Term
-// whose Type equals subjectName authorises that specific subject;
+// sumListsSubject reports whether the subject going by names is
+// authorised by any member (or tuple element) of the sum. A textual
+// Term whose Type equals one of names authorises that subject;
 // a `*` complete wildcard authorises every subject because the
 // surface form's design intent is "match every value, including
 // labelled subjects" — propagation follows the same admission set
@@ -143,14 +179,14 @@ func conditionAuthorisesSubject(anno *dsl.ReturnAnnotation, subjectName string) 
 // absence from this chain-authorisation gate. A labelled subject
 // reached only through a `_` member therefore leaks, matching the
 // fixtures in sentinels_placeholder.go.
-func sumListsSubject(sum *dsl.DirectSum, subjectName string) bool {
+func sumListsSubject(sum *dsl.DirectSum, names []string) bool {
 	for _, m := range sum.Members {
 		switch {
 		case m.Term != nil:
 			if m.Term.Wildcard {
 				return true
 			}
-			if m.Term.Type == subjectName {
+			if slices.Contains(names, m.Term.Type) {
 				return true
 			}
 		case m.Tuple != nil:
@@ -161,7 +197,7 @@ func sumListsSubject(sum *dsl.DirectSum, subjectName string) bool {
 				if e.Term.Wildcard {
 					return true
 				}
-				if e.Term.Type == subjectName {
+				if slices.Contains(names, e.Term.Type) {
 					return true
 				}
 			}

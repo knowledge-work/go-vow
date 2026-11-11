@@ -172,10 +172,12 @@ func functionEmitsSubject(pass *analysis.Pass, fn *ast.FuncDecl, subject string,
 // expressionEmitsSubject reports whether expr resolves to subject
 // either as a direct identifier (or through a one-hop local alias)
 // or as a call to a function whose vow:emit declaration covers
-// subject. The recognition is deliberately narrow: dynamic
-// dispatch, struct literals, and arbitrary composite expressions
-// return false so the self-validation only credits emissions the
-// analyzer can statically trace.
+// subject. A qualified identifier matches subject by its `pkg.Name`
+// text, and any other selector by its selector tail. The
+// recognition is deliberately narrow: dynamic dispatch, struct
+// literals, and arbitrary composite expressions return false so the
+// self-validation only credits emissions the analyzer can
+// statically trace.
 func expressionEmitsSubject(pass *analysis.Pass, fn *ast.FuncDecl, expr ast.Expr, subject string, emit map[types.Object][]string) bool {
 	expr = resolveExprAlias(fn, expr)
 	switch v := expr.(type) {
@@ -184,6 +186,9 @@ func expressionEmitsSubject(pass *analysis.Pass, fn *ast.FuncDecl, expr ast.Expr
 			return true
 		}
 	case *ast.SelectorExpr:
+		if qualified := qualifiedIdentName(pass, v); qualified != "" {
+			return qualified == subject
+		}
 		if v.Sel != nil && v.Sel.Name == subject {
 			return true
 		}

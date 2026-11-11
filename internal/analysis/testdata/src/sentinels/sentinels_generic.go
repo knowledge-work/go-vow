@@ -10,7 +10,7 @@ import "errors"
 // is the diagnostic itself, not the implementation route.
 
 // vow:define @Sentinel
-var ErrGenericFlow = errors.New("generic-flow")
+var ErrGenericFlow = errors.New("generic-flow") // want ErrGenericFlow:"subject\\(vow:define @Sentinel\\)"
 
 // genericMultiHopLeak exercises findSSAFunction against a generic
 // origin. The body matches the canonical SSA-detected multi-hop

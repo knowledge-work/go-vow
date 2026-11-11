@@ -44,3 +44,19 @@ func resolveExprObject(pass *analysis.Pass, expr ast.Expr) types.Object {
 	}
 	return nil
 }
+
+// qualifiedIdentName returns the `pkg.Name` text of sel when sel is a
+// qualified identifier, a name exported by an imported package, and ""
+// for any other selector, such as a field or method access. pkg is the
+// local name the file gives the package, so a renamed import yields
+// that name.
+func qualifiedIdentName(pass *analysis.Pass, sel *ast.SelectorExpr) string {
+	pkgIdent, ok := sel.X.(*ast.Ident)
+	if !ok {
+		return ""
+	}
+	if _, ok := pass.TypesInfo.Uses[pkgIdent].(*types.PkgName); !ok {
+		return ""
+	}
+	return pkgIdent.Name + "." + sel.Sel.Name
+}

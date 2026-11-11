@@ -14,7 +14,14 @@ not recognised.
 Marks a package-level `var` (typically initialized with
 `errors.New`) as a tracked subject. The `must-consume` obligation
 checks every reference to the variable against its classification
-rules and reports leaks.
+rules and reports leaks. A reference from another package
+(`store.ErrNotFound`) is checked as well. The `vow:cond`, `vow:emit`,
+and `vow:use` markers in that package name the sentinel the way the
+reference spells it: `store.ErrNotFound`, `s.ErrNotFound` under
+`import s "store"`, or `ErrNotFound` under a dot import; a `vow:cond`
+Term may also give the import path (`example.com/store.ErrNotFound`).
+The name follows each file's imports, so a `vow:use` function matches
+calls only from files that import the package under the same name.
 
 ```go
 // vow:define @Sentinel

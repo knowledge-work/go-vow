@@ -14,7 +14,7 @@ import (
 // ErrFoo is the sentinel the fixture hands off through the wrap call.
 //
 // vow:define @Sentinel
-var ErrFoo = errors.New("foo")
+var ErrFoo = errors.New("foo") // want ErrFoo:"subject\\(vow:define @Sentinel\\)"
 
 // wrapped resolves through the registered wrap signature.
 //
