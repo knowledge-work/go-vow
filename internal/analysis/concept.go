@@ -8,6 +8,9 @@ import (
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
+
+	"github.com/knowledge-work/go-vow/internal/dsl"
+	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
 // conceptDefineMarker is the doc-comment marker that declares a
@@ -19,24 +22,17 @@ import (
 // scan regardless of which concept the subject belongs to.
 const conceptDefineMarker = "vow:define"
 
-// Built-in concepts whose behaviour is wired into the analyzer.
-// Other concepts that authors may declare are forward-compat
-// surface: the parser recognises them and records the declaration
-// so user code can already be written against future preset
-// configurations, but the analyzer emits an info-level diagnostic
-// stating that no behaviour is registered.
-const (
-	builtinConceptSentinel = "Sentinel"
-	builtinConceptClosable = "Closable"
-)
+// builtinConceptClosable is the concept whose lifecycle pass is wired
+// into the analyzer rather than dispatched from a preset, so it has
+// behaviour whichever presets are loaded.
+const builtinConceptClosable = "Closable"
 
 // reportConceptDefineDiagnostics walks every package-level var
 // declaration and reports an info-level diagnostic for each
-// `vow:define @<concept>` whose concept is not currently wired
-// into the analyzer. Sentinel and Closable are the built-in
-// concepts; other concepts are accepted as a forward-compat
-// surface so authors can declare them and the analyzer accepts
-// the declaration without enforcing behaviour.
+// `vow:define @<concept>` whose concept has no behaviour under
+// presets: neither Closable nor selected by a preset that dispatches
+// must-consume. Such a concept is accepted so authors can declare it
+// ahead of the preset that gives it behaviour.
 //
 // The diagnostic anchors at the GenDecl so a `var ( ... )` block
 // shared by multiple specs emits one diagnostic per declared
@@ -44,7 +40,8 @@ const (
 // a pending-configuration note rather than a hard error because
 // the declaration is structurally valid, only the behaviour is
 // awaiting registration.
-func reportConceptDefineDiagnostics(pass *analysis.Pass) {
+func reportConceptDefineDiagnostics(pass *analysis.Pass, presets []*dsl.Preset) {
+	registered := registeredConcepts(presets)
 	insp := pass.ResultOf[inspect.Analyzer].(*inspector.Inspector)
 	filter := []ast.Node{(*ast.GenDecl)(nil)}
 	insp.Preorder(filter, func(n ast.Node) {
@@ -60,9 +57,9 @@ func reportConceptDefineDiagnostics(pass *analysis.Pass) {
 		// the two passes from double-reporting a concept that
 		// lives on a doc shared by both shapes.
 		reported := map[string]struct{}{}
-		emitFromDoc(pass, gd, gd.Doc, reported)
+		emitFromDoc(pass, gd, gd.Doc, registered, reported)
 		for _, spec := range gd.Specs {
-			emitFromDoc(pass, gd, specDoc(spec), reported)
+			emitFromDoc(pass, gd, specDoc(spec), registered, reported)
 		}
 	})
 }
@@ -82,12 +79,27 @@ func specDoc(spec ast.Spec) *ast.CommentGroup {
 	return nil
 }
 
+// registeredConcepts returns the concepts that have behaviour under
+// presets: Closable, and each concept a preset dispatching
+// must-consume selects through `vow:define @<Concept>`.
+func registeredConcepts(presets []*dsl.Preset) map[string]struct{} {
+	registered := seq.ChainOf(presets...).
+		Filter(func(p *dsl.Preset) bool {
+			return seq.ChainOf(p.Obligations...).Any(func(o dsl.Obligation) bool { return o.Type == "must-consume" })
+		}).
+		FlatMap(func(p *dsl.Preset) seq.Chain[dsl.Subject] { return seq.ChainOf(p.Subjects...) }).
+		FilterMap(dsl.Subject.Concept).
+		ToSet(func(concept string) string { return concept })
+	registered[builtinConceptClosable] = struct{}{}
+	return registered
+}
+
 // emitFromDoc scans doc for `vow:define` lines and emits an info-
-// level diagnostic anchored at gd's position for every non-builtin
-// concept it finds. The reported set carries the concepts already
-// surfaced for this GenDecl so the helper is safe to invoke once
-// per doc-comment source (the group doc and each spec doc).
-func emitFromDoc(pass *analysis.Pass, gd *ast.GenDecl, doc *ast.CommentGroup, reported map[string]struct{}) {
+// level diagnostic anchored at gd's position for every concept it
+// finds outside registered. The reported set carries the concepts
+// already surfaced for this GenDecl so the helper is safe to invoke
+// once per doc-comment source (the group doc and each spec doc).
+func emitFromDoc(pass *analysis.Pass, gd *ast.GenDecl, doc *ast.CommentGroup, registered, reported map[string]struct{}) {
 	if doc == nil {
 		return
 	}
@@ -96,7 +108,7 @@ func emitFromDoc(pass *analysis.Pass, gd *ast.GenDecl, doc *ast.CommentGroup, re
 		if !ok {
 			continue
 		}
-		if concept == builtinConceptSentinel || concept == builtinConceptClosable {
+		if _, ok := registered[concept]; ok {
 			continue
 		}
 		if _, seen := reported[concept]; seen {

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"maps"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"strings"
 
 	"github.com/knowledge-work/go-vow/internal/cli"
+	"github.com/knowledge-work/go-vow/internal/config"
 	"github.com/knowledge-work/go-vow/internal/seq"
 )
 
@@ -100,8 +102,11 @@ func vetPackagePath(id string) string {
 // With asJSON, it prints the report on stdout in the `go vet -json` shape
 // instead of as text on stderr.
 //
-// vow:nil (,,,?,)
-func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests bool, patterns []string, asJSON bool) int {
+// presetsJSON carries the content of the preset files the config names,
+// in the form the vettool's presets flag reads; "" passes no flag.
+//
+// vow:nil (,,,,?,)
+func runVetPipeline(configYAML, presetsJSON string, narrow cli.ChangedFileSet, includeTests bool, patterns []string, asJSON bool) int {
 	self, err := os.Executable()
 	if err != nil {
 		os.Stderr.WriteString("vow: locate own binary: " + err.Error() + "\n")
@@ -110,6 +115,9 @@ func runVetPipeline(configYAML string, narrow cli.ChangedFileSet, includeTests b
 	args := []string{"vet", "-json", "-vettool=" + self}
 	if configYAML != "" {
 		args = append(args, "-vow."+vetConfigFlag+"="+configYAML)
+	}
+	if presetsJSON != "" {
+		args = append(args, "-vow."+vetPresetsFlag+"="+presetsJSON)
 	}
 	// The flag rides on every run, narrow or not: its value is what the
 	// go command keys a package's result on, so making it conditional
@@ -441,4 +449,24 @@ func vetConfigYAML(flags driverFlags) string {
 		return string(raw)
 	}
 	return ""
+}
+
+// vetPresetsJSON returns the presets flag's value for the preset files
+// cfg has loaded: their content as a JSON list of strings, or "" when
+// there are none. The content travels rather than the paths for the
+// reason vetConfigYAML gives, and because a path relative to the
+// config file means nothing to the vettool.
+//
+// vow:nil (?)
+func vetPresetsJSON(cfg *config.Config) string {
+	if cfg == nil || len(cfg.LoadedPresets) == 0 {
+		return ""
+	}
+	sources := seq.ChainOf(cfg.LoadedPresets...).Map(func(p config.LoadedPreset) string { return string(p.Source) }).ToSlice()
+	encoded, err := json.Marshal(sources)
+	if err != nil {
+		// encoding/json cannot fail to encode a list of strings.
+		panic(fmt.Sprintf("vow: marshal presets: %v", err))
+	}
+	return string(encoded)
 }

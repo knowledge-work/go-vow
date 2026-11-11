@@ -27,7 +27,9 @@ into the analyzer; the analyzer accepts the declarations with
 additional concepts under the same `vow:define @<Concept>` form. A
 declaration whose concept has no behaviour registered surfaces an
 info-level diagnostic so authors learn that preset configuration
-for that concept is pending.
+for that concept is pending; a `must-consume` preset listed under
+`presets` in `vow.yaml` gives the concept its behaviour (see
+[Presets](presets.md#loading-a-preset)).
 
 Constraints:
 
@@ -1103,8 +1105,8 @@ Layout:
 
 - The first argument is an alias (`result`); annotations in the
   package reference rules as `@result.OkErr[args]`.
-- The second argument is the preset path (relative to the project
-  or absolute, depending on how the preset is loaded).
+- The second argument names a rule library built into `vow`, such as
+  `preset/std/result`.
 
 Behaviour:
 

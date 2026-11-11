@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/knowledge-work/go-vow/internal/assert"
+	"github.com/knowledge-work/go-vow/internal/seq"
 	"github.com/knowledge-work/go-vow/internal/tabletest"
 )
 
@@ -319,4 +320,101 @@ func TestParseAnalysisScope(t *testing.T) {
 func writeFile(t *testing.T, path, body string) {
 	t.Helper()
 	assert.MustNoError(t, "WriteFile "+path, os.WriteFile(path, []byte(body), 0o644))
+}
+
+// TestReadFileLoadsPresets pins how ReadFile resolves the paths under
+// presets: a relative path against the directory of the vow.yaml, not
+// the working directory, and an absolute path as written, keeping the
+// order the file lists them in.
+func TestReadFileLoadsPresets(t *testing.T) {
+	root := t.TempDir()
+	other := t.TempDir()
+	assert.MustNoError(t, "Mkdir", os.Mkdir(filepath.Join(root, "sub"), 0o755))
+	writeFile(t, filepath.Join(root, "a.yaml"), presetYAML("a"))
+	writeFile(t, filepath.Join(root, "sub", "b.yaml"), presetYAML("b"))
+	writeFile(t, filepath.Join(other, "c.yaml"), presetYAML("c"))
+	path := filepath.Join(root, "vow.yaml")
+	writeFile(t, path, "presets:\n  - a.yaml\n  - sub/b.yaml\n  - "+filepath.Join(other, "c.yaml")+"\n")
+
+	cfg, err := ReadFile(path)
+	assert.MustNoError(t, "ReadFile", err)
+	names := seq.ChainOf(cfg.LoadedPresets...).Map(func(loaded LoadedPreset) string { return loaded.Preset.Name }).ToSlice()
+	assert.DeepEqual(t, "loaded preset names", names, []string{"a", "b", "c"})
+	assert.Equal(t, "Source of the first preset", string(cfg.LoadedPresets[0].Source), presetYAML("a"))
+}
+
+// TestParseLeavesPresetsUnloaded pins that Parse reads no file: the
+// path it has no directory for stays a path, so a caller such as the
+// vettool can supply the presets another way.
+func TestParseLeavesPresetsUnloaded(t *testing.T) {
+	cfg, err := Parse([]byte("presets:\n  - does-not-exist.yaml\n"))
+	assert.MustNoError(t, "Parse", err)
+	assert.DeepEqual(t, "Presets", cfg.Presets, []string{"does-not-exist.yaml"})
+	assert.Len(t, "LoadedPresets", cfg.LoadedPresets, 0)
+}
+
+// TestReadFileRejectsUnloadablePresets pins each way a preset file can
+// fail to load. want is a fragment of the message, so a case that
+// fails for another reason fails the test.
+func TestReadFileRejectsUnloadablePresets(t *testing.T) {
+	type presetErrorCase struct {
+		files map[string]string // preset files beside the vow.yaml
+		list  string            // the presets the vow.yaml names
+		want  string
+	}
+	tabletest.Run(t, map[string]presetErrorCase{
+		"missing file": {
+			list: "[missing.yaml]",
+			want: "missing.yaml: no such file or directory",
+		},
+		"malformed preset": {
+			files: map[string]string{"p.yaml": "name: p\nsubjects: [{match: \"annotation:vow:define @P\"}]\nobligations: [{type: must-consum}]\n"},
+			list:  "[p.yaml]",
+			want:  "not an obligation type vow reads",
+		},
+		"preset declaring rules": {
+			files: map[string]string{"p.yaml": "name: p\nrules:\n  R:\n    params: [T]\n    body: nonzero T\n"},
+			list:  "[p.yaml]",
+			want:  `preset "p" declares rules, which vow:import does not read from a loaded preset`,
+		},
+		"subject outside vow:define": {
+			files: map[string]string{"p.yaml": "name: p\nsubjects: [{match: \"annotation:vow:other\"}]\nobligations: [{type: must-consume, detail: {consumers: [errors.Is]}}]\n"},
+			list:  "[p.yaml]",
+			want:  `preset "p" subject "annotation:vow:other" selects no concept`,
+		},
+		"preset named closable": {
+			files: map[string]string{"p.yaml": presetYAML("closable")},
+			list:  "[p.yaml]",
+			want:  `preset "closable" would replace the built-in closable preset`,
+		},
+		"preset listing built-in closables": {
+			files: map[string]string{"p.yaml": presetYAML("p") + "built_in_closables: [\"*strings.Reader\"]\n"},
+			list:  "[p.yaml]",
+			want:  `preset "p" sets the Closable types`,
+		},
+		"preset declaring must-close": {
+			files: map[string]string{"p.yaml": "name: p\nsubjects: [{match: \"annotation:vow:define @P\"}]\nobligations: [{type: must-close}]\n"},
+			list:  "[p.yaml]",
+			want:  `preset "p" declares must-close, which no check reads`,
+		},
+		"two files declaring one name": {
+			files: map[string]string{"a.yaml": presetYAML("p"), "b.yaml": presetYAML("p")},
+			list:  "[a.yaml, b.yaml]",
+			want:  `two files declare the preset name "p"`,
+		},
+	}, func(t *testing.T, c presetErrorCase) {
+		root := t.TempDir()
+		for name, body := range c.files {
+			writeFile(t, filepath.Join(root, name), body)
+		}
+		path := filepath.Join(root, "vow.yaml")
+		writeFile(t, path, "presets: "+c.list+"\n")
+		_, err := ReadFile(path)
+		assert.ErrorContains(t, "ReadFile", err, c.want)
+	})
+}
+
+// presetYAML returns a well-formed preset file declaring name.
+func presetYAML(name string) string {
+	return "name: " + name + "\nsubjects:\n  - match: \"annotation:vow:define @" + name + "\"\nobligations:\n  - type: must-consume\n    detail:\n      consumers: [errors.Is]\n"
 }

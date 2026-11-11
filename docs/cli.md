@@ -68,8 +68,9 @@ Two consequences are worth knowing before turning it on:
   result on the flags the vettool received, and a file the tool opens
   itself is not part of that key, so a discovered config would leave an
   edited policy answering with the previous run's verdict. Use
-  `--config-file` or `--config-yaml`; vow reads the file and passes its
-  content, so an edit invalidates the cached result.
+  `--config-file` or `--config-yaml`; vow reads the config and the
+  preset files listed under its `presets` key, and passes their
+  content, so an edit to any of them invalidates the cached result.
 - **The first run pays for the dependencies.** The go command compiles
   export data for the closure on a cold cache. A CI job that runs this
   mode wants a Go build cache in front of it.
@@ -98,10 +99,10 @@ on their own.
 
 ## Configuration
 
-Behaviour that is neither a preset nor an annotation is set in a
-`vow.yaml` file. Without a config flag, each package uses the
-nearest such file in an ancestor directory, which lets a repository
-turn a rule on one subtree at a time. A section a file omits keeps
+Behaviour that is not an annotation, including which preset files to
+load, is set in a `vow.yaml` file. Without a config flag, each
+package uses the nearest such file in an ancestor directory, which
+lets a repository turn a rule on one subtree at a time. A section a file omits keeps
 the built-in default for that section. A file vow cannot read or
 parse, for example one with a misspelled key at any level, is reported
 as a `vow[config]` diagnostic at each package it governs. Those
@@ -114,6 +115,7 @@ with a `vow.yaml` further up.
 | `nil_decl.require_declarations` | Turn on the declaration-completeness rule, which is off by default. See [Annotations](annotations.md). |
 | `caller_resolver.exclude_package_suffixes` | Drop packages whose import path ends in one of these suffixes from the scope `--with-callers` computes. Empty by default. |
 | `analysis_scope.first_party_prefixes` | Parse and analyze only the target packages and the dependencies whose import path falls under one of these prefixes; every other dependency contributes type information from export data and is neither parsed nor analyzed. Empty (the default) keeps the whole-closure load. |
+| `presets` | Load these preset files in addition to the built-in presets. A relative path resolves against the directory of the `vow.yaml` that lists it, or against the working directory under `--config-yaml`. A preset whose `name` is `sentinel-error` replaces the built-in one. See [Presets](presets.md#loading-a-preset). |
 
 The resolver runs once per invocation rather than once per package,
 so `caller_resolver` — and `analysis_scope`, whose load likewise
@@ -235,21 +237,21 @@ exits `2` in both modes.
 
 - **`go vet`.** `vow` can be invoked via `go vet -vettool=$(which vow)`
   inside a project, which gives access to the analyzer through the
-  same package loading pipeline `go vet` uses.
+  same package loading pipeline `go vet` uses. Run this way, `vow`
+  reads no `vow.yaml`; to load presets through `go vet`, use
+  `--vet-mode`.
 - **CI.** Run `vow ./...` after `go build` so the analyzer sees a
   green-compiling tree. Diagnostics never block the build (they only
   set the exit code), so pair the invocation with the upstream
   tool's failure semantics.
-- **Custom presets.** The default `vow` binary embeds the
-  `sentinel-error` preset. To enforce custom obligations, build a
-  binary that constructs `analysis.New(presets)` over your own
-  preset list and wraps it with `singlechecker.Main`. That binary
-  takes the `singlechecker` flags, so the driver flags on this page,
-  such as `--changed-files` and `--config-file`, are not available.
+- **Custom presets.** The `vow` binary embeds the `sentinel-error`
+  and `closable` presets. List your own preset files under `presets`
+  in `vow.yaml` to enforce more obligations; see
+  [Presets](presets.md#loading-a-preset).
 
 ## See also
 
 - [Getting started](getting-started.md) for the typical install /
   annotate / run loop.
-- [Presets](presets.md) for authoring custom presets that the CLI
-  can enforce when statically embedded.
+- [Presets](presets.md) for authoring the preset files the `presets`
+  key loads.

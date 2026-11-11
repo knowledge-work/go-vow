@@ -1,0 +1,4 @@
+# The sample preset that ships under example/, loaded as an adopter
+# would load a copy of it.
+presets:
+  - ../../../../../example/werror.yaml

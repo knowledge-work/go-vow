@@ -65,10 +65,12 @@ Key points:
 - The `must-consume` obligation classifies every subject reference
   via the AST stack and reports leaks. Observers are matched
   syntactically as `pkg.Func` calls inside a conditional.
-- The list of consumers is configurable. Adding `myerrors.Is` would
-  accept `myerrors.Is(err, ErrFoo)` as an observation. Aliased
-  imports are not resolved, so the consumer must spell the same
-  package identifier as the call site.
+- The list of consumers is configurable: a copy of this preset
+  loaded under the same name, with `myerrors.Is` added to
+  `consumers`, accepts `myerrors.Is(err, ErrFoo)` as an observation
+  (see [Loading a preset](#loading-a-preset)). Aliased imports are
+  not resolved, so the consumer must spell the same package
+  identifier as the call site.
 
 ## Sample: passthrough-emit preset (`example/werror.yaml`)
 
@@ -91,8 +93,8 @@ obligations:
 - The sample preset ships under `example/` rather than the
   built-in set so adopters opt into it deliberately. Copy the
   file, change the function patterns to match the wrap library
-  the codebase uses, and register the preset alongside the
-  built-in set when constructing the analyzer.
+  the codebase uses, and list the copy under `presets` in
+  `vow.yaml` (see [Loading a preset](#loading-a-preset)).
 - The subject scheme reuses the `vow:define @Sentinel`
   registration so the obligation applies to the same sentinel
   set the `sentinel-error` preset tracks.
@@ -148,12 +150,16 @@ position declares `error`.
 
 ## Authoring a custom preset
 
-1. **Pick a subject scheme.** The only scheme currently recognised
-   is `annotation:` — the argument is the doc-comment marker the
-   variable must carry.
+1. **Pick the concept.** The subject is
+   `annotation:vow:define @<Concept>`, which selects every
+   package-level `var` declared with `// vow:define @<Concept>`.
+   Use a new name for your own concept, or `@Sentinel` for the vars
+   the `sentinel-error` preset tracks (for `must-consume`, replace
+   that preset instead).
 
-2. **Pick an obligation type.** The bundled analyzer recognises
-   `must-consume`. The `detail` bag is type-specific:
+2. **Pick an obligation type.** `must-consume` lists the functions
+   that count as an observation, as below; `passthrough-emit` lists
+   wrap signatures, as in the sample above.
 
    ```yaml
    obligations:
@@ -164,30 +170,72 @@ position declares `error`.
            - errors.Is
    ```
 
-3. **(Optional) Author rule templates.** Each rule declares
-   `params` and a `body`. Parameters appear as bare identifiers in
-   the body and are textually substituted at expansion time. Avoid
-   shadowing the parameter name with another DSL keyword.
+3. **Load the preset** as the next section describes.
 
-4. **Load the preset.** Built-in presets are embedded in
-   `internal/analysis/builtin.go`. Custom presets can be added by
-   constructing an `analysis.Analyzer` with the desired preset list
-   via `analysis.New(presets)`.
+A loaded preset may not declare `rules:` or configure the Closable
+check; see [Validation gates](#validation-gates).
+
+## Loading a preset
+
+List the preset files under `presets` in `vow.yaml`:
+
+```yaml
+presets:
+  - tools/vow/notfound.yaml
+  - tools/vow/werror.yaml
+```
+
+- A relative path resolves against the directory of the `vow.yaml`
+  that lists it, or against the working directory under
+  `--config-yaml`.
+- A preset whose `name` is `sentinel-error` replaces the built-in
+  preset of that name; any other name adds a preset. To change what
+  counts as observing a `@Sentinel` var, load a copy of
+  `preset/sentinel-error.yaml` with the consumers added. An added
+  preset would run beside the built-in one, which would go on
+  reporting the new consumer's checks as leaks, and would report
+  every other leak a second time.
+- The key follows the same scoping as the rest of `vow.yaml`: the
+  nearest file applies to a package, so a `vow.yaml` lower in the
+  tree that omits `presets` loads none of the presets above it.
+- `--vet-mode` passes the content of each file to `go vet`, so an
+  edit to a preset invalidates the cached result.
 
 ## Validation gates
 
 The preset validator enforces a small invariant set:
 
 - Preset `name` must be non-empty.
-- Subjects with empty `match` are rejected.
-- Obligations with empty `type` are rejected.
+- Unknown keys are rejected.
+- `severity`, when present, must be `warning`, the only severity vow
+  reports.
+- Subjects must use the `annotation:` scheme.
+- Obligations must be of type `must-consume` or `passthrough-emit`
+  (`must-close` belongs to the built-in `closable` preset), with a
+  `detail` holding the keys that type reads: `consumers` for
+  `must-consume`, and `functions` entries with `pattern`,
+  `arg-position`, and `return-slot` for `passthrough-emit`. A
+  function name may not contain spaces.
 - Rule names must be non-empty.
 - Rule bodies must be non-empty.
 - Rule parameter lists may not contain duplicates.
 
-Errors arrive as `dsl.Load` / `dsl.Parse` return values; the
-analyzer surfaces them on startup so authoring mistakes fail fast
-instead of producing partial enforcement.
+A loaded preset must in addition:
+
+- select its subjects with `vow:define @<Concept>`;
+- declare no `rules:`, since `vow:import` reads rule templates only
+  from the libraries built into `vow`, such as `preset/std/result`;
+- leave the Closable check alone: no `must-close` obligation, no
+  `built_in_closables`, and no preset named `closable`. The check is
+  built in, and `closable.built_in_closables` in `vow.yaml` sets its
+  types;
+- have a name no other file under the same `presets` key declares.
+
+A preset file that is missing or fails a gate stops a run that names
+it through `--config-file` or `--config-yaml` with exit code `2`.
+Named by a `vow.yaml` that a package discovers, it is reported as a
+`vow[config]` diagnostic, and that package runs with the built-in
+defaults, as it does when its `vow.yaml` is malformed.
 
 ## See also
 

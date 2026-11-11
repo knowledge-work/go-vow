@@ -1,0 +1,9 @@
+name: extra-sentinel
+subjects:
+  - match: "annotation:vow:define @Sentinel"
+obligations:
+  - type: must-consume
+    detail:
+      consumers:
+        - errors.Is
+        - misslib.IsMiss

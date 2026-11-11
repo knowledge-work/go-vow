@@ -116,6 +116,49 @@ func TestVetConfigValueSet(t *testing.T) {
 	assert.Error(t, "Set with malformed yaml", value.Set("nil_decl:\n  require_declarations: not-a-bool\n"))
 }
 
+// TestVetPresetsSurviveEitherFlagOrder sets the config and presets
+// flags in both orders. Setting the config replaces the Config the
+// analyzer closed over, so it must not drop presets already loaded.
+func TestVetPresetsSurviveEitherFlagOrder(t *testing.T) {
+	const configYAML = "presets: [miss.yaml]\n"
+	presetsJSON := vetPresetsJSON(&config.Config{LoadedPresets: []config.LoadedPreset{{Source: []byte(presetModule["presets/miss.yaml"])}}})
+	type flagOrderCase struct {
+		presetsFirst bool
+	}
+	tabletest.Run(t, map[string]flagOrderCase{
+		"config first":  {presetsFirst: false},
+		"presets first": {presetsFirst: true},
+	}, func(t *testing.T, c flagOrderCase) {
+		cfg := new(config.Config)
+		setConfig := func() { assert.MustNoError(t, "Set config", (&vetConfigValue{cfg: cfg}).Set(configYAML)) }
+		setPresets := func() { assert.MustNoError(t, "Set presets", vetPresetsValue{cfg: cfg}.Set(presetsJSON)) }
+		if c.presetsFirst {
+			setPresets()
+			setConfig()
+		} else {
+			setConfig()
+			setPresets()
+		}
+		assert.DeepEqual(t, "Presets", cfg.Presets, []string{"miss.yaml"})
+		assert.MustLen(t, "LoadedPresets", cfg.LoadedPresets, 1)
+		assert.Equal(t, "loaded preset name", cfg.LoadedPresets[0].Preset.Name, "miss")
+	})
+}
+
+func TestVetPresetsValueRejectsMalformedInput(t *testing.T) {
+	tabletest.Run(t, map[string]string{
+		"not a JSON list":        `{"name": "miss"}`,
+		"not a preset":           `["name: miss\n"]`,
+		"preset declaring rules": `["name: r\nrules:\n  R:\n    params: [T]\n    body: nonzero T\n"]`,
+		"two presets of one name": vetPresetsJSON(&config.Config{LoadedPresets: []config.LoadedPreset{
+			{Source: []byte(presetModule["presets/miss.yaml"])},
+			{Source: []byte(presetModule["presets/miss.yaml"])},
+		}}),
+	}, func(t *testing.T, text string) {
+		assert.Error(t, "Set", vetPresetsValue{cfg: new(config.Config)}.Set(text))
+	})
+}
+
 func TestParseVetReportKeepsAnAnalyzerError(t *testing.T) {
 	// A package whose analyzer failed is reported as an object rather
 	// than a diagnostic list, and a decoder that admits only the list

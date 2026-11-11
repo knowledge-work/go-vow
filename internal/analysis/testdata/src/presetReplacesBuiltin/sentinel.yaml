@@ -1,0 +1,10 @@
+name: sentinel-error
+subjects:
+  - match: "annotation:vow:define @Sentinel"
+obligations:
+  - type: must-consume
+    detail:
+      consumers:
+        - errors.Is
+        - errors.As
+        - misslib.IsMiss
