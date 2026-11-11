@@ -403,7 +403,7 @@ acquisition to discharge. The pipeline runs in three steps:
    declarations carrying `// vow:define @Closable` (walked by
    `discoverClosableTypeNames` over the package's `TypeSpec` nodes)
    and the `built_in_closables` list from the closable preset
-   (`*os.File`, `*net.TCPConn`, `*bufio.Writer`, `io.Closer`).
+   (`*os.File`, `*net.TCPConn`, `io.Closer`).
 2. **Caller-side `vow:emit` discovery.** `discoverCallerEmit`
    walks every comment group for statement-scope `// vow:emit X`
    markers. Each marker anchors to a statement line through the
@@ -421,7 +421,12 @@ acquisition to discharge. The pipeline runs in three steps:
    without a recognised discharge. `checkUpcastInvariant` runs in
    the same walk and reports the three upcast sites (return
    statement, call argument, assignment LHS) where a Closable
-   value flows into a non-Closable interface.
+   value flows into a non-Closable interface. A call argument
+   naming a local variable the function closes with its own
+   deferred Close, and never reassigns or takes the address of, is
+   taken as borrowed and skipped.
+   Unlike the discharge above, this exemption ignores a deferred
+   Close inside a function literal.
 
 `isClosableType` resolves the type-axis match across four shapes:
 the fully-qualified type string, a single pointer indirection, the

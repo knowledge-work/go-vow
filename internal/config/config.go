@@ -98,13 +98,13 @@ type NilDecl struct {
 // Closable models the closable-section knobs.
 type Closable struct {
 	// BuiltinClosables overrides the closable preset's built-in
-	// type list (`*os.File`, `*net.TCPConn`, `*bufio.Writer`,
-	// `io.Closer`) for the scope this config applies to. A nil
-	// pointer (the field is absent from yaml) keeps the embedded
-	// list; a non-nil pointer — including an empty list — replaces
-	// it. Author-declared `vow:define @Closable` types still
-	// participate regardless of this knob; only the ambient
-	// stdlib-and-convention list is controlled.
+	// type list (`*os.File`, `*net.TCPConn`, `io.Closer`) for the
+	// scope this config applies to. A nil pointer (the field is
+	// absent from yaml) keeps the embedded list; a non-nil pointer
+	// — including an empty list — replaces it. Author-declared
+	// `vow:define @Closable` types still participate regardless of
+	// this knob; only the ambient stdlib-and-convention list is
+	// controlled.
 	BuiltinClosables *[]string `yaml:"built_in_closables"`
 }
 

@@ -73,8 +73,10 @@ Discharges:
 
 Built-in Closable types ship through the `closable` preset's
 `built_in_closables` list (`*os.File`, `*net.TCPConn`,
-`*bufio.Writer`, `io.Closer`) so standard-library values flow
-through the same lifecycle check without a user-side annotation.
+`io.Closer`) so standard-library values flow through the same
+lifecycle check without a user-side annotation. A generic type
+parameter counts as Closable when its constraint names or embeds a
+Closable interface.
 
 Upcast invariant:
 
@@ -85,12 +87,17 @@ cannot vanish behind a wider type. Declare the destination type as
 a Closable interface (carrying its own `vow:define @Closable`
 marker) or hand the value off explicitly with `vow:emit`.
 
+A call argument does not report when it names a local variable
+that the function's own body closes with `defer x.Close()` and
+never reassigns or takes the address of: the call is taken as
+borrowing the value. For this
+exemption, a deferred Close inside a function literal does not
+count.
+
 The recogniser is intentionally aggressive: an ambiguous site
-reports so the author opts in to the suppression with
-`vow:suppress` rather than the analyzer silently dropping the
-lifecycle. Generic-type parameter constraints land in a separate
-change; until then, polymorphic Closable handling falls back to
-the suppression valve.
+reports. Where the code cannot be changed to avoid a report, a
+`vow:suppress` marker drops the acquisition and upcast diagnostics
+the same way it drops must-consume ones.
 
 ## `vow:cond`
 
@@ -1004,8 +1011,8 @@ func usesBoundary() error {
 
 ## `vow:suppress`
 
-A caller-authored marker that drops a must-consume diagnostic on
-the line or function the author writes it on. The payload is a
+A caller-authored marker that drops a diagnostic on the line or
+function the author writes it on. The payload is a
 mandatory reason — the marker is a debt signal, not an assertion,
 so the analyzer enforces the documentation surface.
 
@@ -1018,16 +1025,18 @@ func dropsLeak() error {
 
 Behaviour:
 
-- The marker affects must-consume diagnostics only; other diagnostic
-  classes (return-position mismatch, parser errors, concept-system
-  info diagnostics) flow through untouched.
-- Two scopes: a function-doc occurrence silences every must-consume
+- The marker affects must-consume, nil-safety, `nil-decl`,
+  `vow:readonly` write-after-escape, and Closable acquisition and
+  upcast diagnostics; other diagnostic classes (return-position
+  mismatch, parser errors, diagnostics about a `vow:emit` marker
+  itself, concept-system info diagnostics) flow through untouched.
+- Two scopes: a function-doc occurrence silences every such
   diagnostic inside the function; a line comment (trailing or
   leading the statement, mirroring `//nolint`) silences the
   statement on that line. A trailing comment wins over a leading
   comment on the next line when both could anchor.
 - Bare `vow:suppress` and `vow:suppress:` (empty reason) are
-  diagnosed at parser time; the analyzer refuses to silence a leak
+  diagnosed at parser time; the analyzer refuses to silence a diagnostic
   without a reason because the surface is for debt tracking, not
   assertion.
 
@@ -1198,7 +1207,7 @@ The resolver verifies the subject against the enclosing signature
 at parse time. A subject that does not name any slot surfaces a
 diagnostic at the function declaration so the author sees the
 typo instead of losing the contract silently. The diagnostic
-category matches the marker family: `vow[nil-safety]` for
+label matches the marker family: `vow[nil-safety]` for
 `vow:nil` and `vow[sentinel-error]` for the rest, with caller-side
 statement-scope `vow:emit` reporting under `vow[closable]`.
 
